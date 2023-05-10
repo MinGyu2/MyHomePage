@@ -42,7 +42,9 @@ public class NoticeBoardDAO {
         }
         return notice;
     }
-    public ArrayList<Notice> getNoticeList(){
+
+    // 전체 목록 가져오기 or 검색 목록 가져오기
+    public ArrayList<Notice> getNoticeList(String question){
         var arr = new ArrayList<Notice>();
 
         try{
@@ -50,9 +52,13 @@ public class NoticeBoardDAO {
             var query = new StringBuilder();
             query.append("select * from ");
             query.append(tableName);
+            query.append(" where title like '%'||?||'%' or main_text like '%'||?||'%'");
             query.append(" order by gen_time desc");
 
+
             var pstmt = conn.prepareStatement(query.toString());
+            pstmt.setString(1, question);
+            pstmt.setString(2, question);
             var result = pstmt.executeQuery();
 
             var maxLen = 50;
@@ -75,6 +81,8 @@ public class NoticeBoardDAO {
         
         return arr;
     }
+
+    
     // 게시판 저장
     public boolean saveNotice(User user, String title, String mainText){
         var re = false;
@@ -110,6 +118,25 @@ public class NoticeBoardDAO {
             System.out.println(e.getMessage());
             re = false;
         }finally{
+            Close();
+        }
+        return re;
+    }
+    // 삭제
+    public boolean deleteNotice(long sid){
+        var re = false;
+        // delete from notice_board where sid=13;
+        var query = "delete from notice_board where sid=?";
+        try {
+            Connection();
+            var pstmt = conn.prepareStatement(query);
+            pstmt.setLong(1,sid);
+            pstmt.executeUpdate();
+            System.out.println("삭제 완료");
+            re = true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
             Close();
         }
         return re;

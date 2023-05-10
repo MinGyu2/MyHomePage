@@ -117,6 +117,8 @@ public class MainPage extends HttpServlet{
         var noticeBoardSave = "/main_page/notice_board/notice_save";
         var noticeBoardDetail = "/main_page/notice_board/notice_detail";
         var noticeBoardModify = "/main_page/notice_board/notice_modify";
+        var noticeBoardModifySave = "/main_page/notice_board/notice_modify_save";
+        var noticeBoardDelete = "/main_page/notice_board/notice_delete";
         
         if(uri.matches("/main_page[/]?")){
             // 메인페이지를 보여준다.
@@ -126,7 +128,7 @@ public class MainPage extends HttpServlet{
             // 메뉴
             var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
             menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard, false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+"?q=", false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
 
@@ -136,7 +138,7 @@ public class MainPage extends HttpServlet{
         }
 
         // 게시판
-        if(uri.equals(noticeBoard)){
+        if(request.getMethod().equals("GET") && uri.equals(noticeBoard)){
             // 메뉴들
             var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
             menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
@@ -145,12 +147,28 @@ public class MainPage extends HttpServlet{
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             request.setAttribute("menus", menus);
 
-            var noticeBoardDAO = new NoticeBoardDAO(getServletContext());
-            var array = noticeBoardDAO.getNoticeList();
-            request.setAttribute("noticeBoard", array);
+            var q = request.getParameter("q"); // null or "" 면 모든 데이터 다 보여주기
+            System.out.println(q);
 
-            request.setAttribute("noticeBoardWrite", noticeBoardWrite);
-            request.setAttribute("noticeBoardDetail", noticeBoardDetail);
+            var noticeBoardDAO = new NoticeBoardDAO(getServletContext());
+
+            try{
+                if(q == null){
+                    // 모든 데이터 다 가져오기.
+                    var array = noticeBoardDAO.getNoticeList("");
+                    request.setAttribute("noticeBoard", array);
+                }else{ 
+                    // 검색 데이터만 가져오기.
+                    var array = noticeBoardDAO.getNoticeList(q);
+                    request.setAttribute("noticeBoard", array);
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+
+
+            request.setAttribute("noticeBoardWrite", noticeBoardWrite); // new write
+            request.setAttribute("noticeBoardDetail", noticeBoardDetail); // show detail
 
             return mainPage(request, response, 2);
         }
@@ -203,6 +221,7 @@ public class MainPage extends HttpServlet{
                     if(user.getSid() == notice.getUserSID()){
                         request.setAttribute("modifyButton", true);
                         request.setAttribute("modifyHref", noticeBoardModify);
+                        request.setAttribute("deleteHref", noticeBoardDelete);
                     }
                     
                     gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_detail.jsp");
@@ -219,26 +238,109 @@ public class MainPage extends HttpServlet{
                 var sid = request.getParameter("pageid");
                 var noticeDAO = new NoticeBoardDAO(getServletContext());
                 var notice = noticeDAO.getNotice(Long.parseLong(sid));
+                if(notice == null){
+                    System.out.println("존재 안하는 글");
+                    return false;
+                }
                 
                 var user = (User)request.getAttribute("user");
 
-                if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함
+                if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함 실패
                     return false;
                 }
 
-                request.setAttribute("noticeBoardURL", ""); // 수정 저장 URL
+                request.setAttribute("noticeBoardURL", noticeBoardModifySave); // 수정 저장 URL
                 
+                request.setAttribute("noticeID", sid); // 페이지 아이디
                 request.setAttribute("title", notice.getTitle());
                 request.setAttribute("mainText", notice.getMainText());
 
-                System.out.println(notice.getUserSID() + "  "+ user.getSid());
+                System.out.println(notice.getUserSID() + "  "+ user.getSid() + "글 수정모드");
 
                 gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_write.jsp");
             }catch(Exception e){
                 System.out.println(e.getMessage());
                 return false;
             }
+        }
 
+        // 글 수정 저장하기
+        if(request.getMethod().equals("POST") && uri.equals(noticeBoardModifySave)) {
+            // delete and insert 삭제 -> 저장 아니면 alter 그냥 수정
+            try {
+                var result = "";
+                var sid = Long.parseLong(request.getParameter("noticeID"));
+                var title = request.getParameter("title");
+                var mainText = request.getParameter("main-text");
+
+                var noticeDAO = new NoticeBoardDAO(getServletContext());
+                var notice = noticeDAO.getNotice(sid);
+                if(notice == null){
+                    System.out.println("존재 안하는 글");
+                    return false;
+                }
+
+                var user = (User)request.getAttribute("user");
+                if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함 실패
+                    return false;
+                }
+
+                // 글 삭제
+                if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
+                    return false;
+                }
+                
+                // 새로운 글 저장
+                if(!noticeDAO.saveNotice(user, title, mainText)){ // 실패
+                    result = "<script>alert('fail');location.href='"+noticeBoard+"'</script>";
+                    simpleAlert(response, result);
+                    return true;
+                }
+
+                // 성공
+                result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
+                simpleAlert(response, result);
+                return true;
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+        }
+
+        // 글 삭제하기
+        if(request.getMethod().equals("GET") && uri.equals(noticeBoardDelete)){
+            try {
+                var result = "";
+                System.out.println("**** 게시글 삭제 시작 ****");
+                var sid = Long.parseLong(request.getParameter("pageid"));
+                var noticeDAO = new NoticeBoardDAO(getServletContext());
+                var notice = noticeDAO.getNotice(sid);
+
+                if(notice == null) {
+                    result = "<script>alert('do not exist.');location.href='"+noticeBoard+"'</script>";
+                    simpleAlert(response, result);
+                    return true;
+                }
+
+                var user = (User)request.getAttribute("user");
+                if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함 실패
+                    System.out.println("글 작성자와 현재유저 일치 안함");
+                    return false;
+                }
+
+                // 글 삭제
+                if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
+                    result = "<script>alert('fail');location.href='"+noticeBoard+"'</script>";
+                    simpleAlert(response, result);
+                    return true;
+                }
+                System.out.println("**** 게시글 삭제 끝 ****");
+
+                result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
+                simpleAlert(response, result);
+                return true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
 
