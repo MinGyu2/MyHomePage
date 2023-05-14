@@ -6,6 +6,7 @@ import java.util.ArrayList;
 
 import com.mingyu2.happyhackingmain.Pair;
 import com.mingyu2.happyhackingmain.problems.Problem;
+import com.mingyu2.happyhackingmain.problems.problemsqlinjection.auth.BlindSQLi;
 import com.mingyu2.happyhackingmain.problems.problemsqlinjection.auth.LoginAuthDiv;
 import com.mingyu2.happyhackingmain.problems.problemsqlinjection.auth.LoginAuthDivCheckIdTwice;
 import com.mingyu2.happyhackingmain.problems.problemsqlinjection.auth.LoginAuthDivErrorBasedSQLi;
@@ -38,6 +39,7 @@ public class LoginAuthMethods implements Problem{
         var distingAndAuthDivPWDHASH = baseURI+"/division_pwdhash"; // 식별과 인증 동시 + 비밀번호 해시 암호화하여 저장
         var distingAndAuthDivTowCheckIdTwice = baseURI+"/division_check_id_twice"; // 식별과 인증 동시 + 비밀번호 해시 암호화하여 저장
         var distingAndAuthDivErrorBasedInjection = baseURI+"/division_error_based_injection"; // 식별과 인증 따로 + 에러기반 injection
+        var distingAndAuthDivBlindSQLInjection = baseURI+"/division_blind_sql_injection"; // blind sql injection 시도해보기.
         if(uri.matches(baseURI+"[/]?")){
             var pairList = new ArrayList<Pair<String,String>>();
             pairList.add(new Pair<>(distingAndAuthSame, "식별 & 인증을 동시에 할 경우 (1)"));
@@ -46,6 +48,7 @@ public class LoginAuthMethods implements Problem{
             pairList.add(new Pair<>(distingAndAuthDivPWDHASH, "식별과 인증 분리 + 비밀번호 해시 암호화하여 저장"));
             pairList.add(new Pair<>(distingAndAuthDivTowCheckIdTwice,"식별과 인증 분리 + 아이디 두번 확인하기"));
             pairList.add(new Pair<>(distingAndAuthDivErrorBasedInjection, "Error Based Injection"));
+            pairList.add(new Pair<>(distingAndAuthDivBlindSQLInjection, "Blind SQL Injection"));
 
             // uri 를 저장한 list를 jsp 로 보낸다.
             request.setAttribute("pairList", pairList);
@@ -70,6 +73,9 @@ public class LoginAuthMethods implements Problem{
             return true;
         }
         if(gotoProbPage(uri, distingAndAuthDivErrorBasedInjection, new LoginAuthDivErrorBasedSQLi(context), "Error Based SQL Injection", null)){
+            return true;
+        }
+        if(gotoProbPage(uri, distingAndAuthDivBlindSQLInjection, new BlindSQLi(context), "Blind SQL Injection", "너의 아이디는 user2 이고 비번은 2222 다. DB 속 정보를 추출해 보자.")){
             return true;
         }
         return false;
