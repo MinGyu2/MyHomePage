@@ -44,7 +44,7 @@ public class NoticeBoardDAO {
     }
 
     // 전체 목록 가져오기 or 검색 목록 가져오기
-    public ArrayList<Notice> getNoticeList(String question){
+    public ArrayList<Notice> getNoticeList(String question, int start, int number){
         var arr = new ArrayList<Notice>();
 
         try{
@@ -53,12 +53,16 @@ public class NoticeBoardDAO {
             query.append("select * from ");
             query.append(tableName);
             query.append(" where title like '%'||?||'%' or main_text like '%'||?||'%'");
-            query.append(" order by gen_time desc");
+            query.append(" order by gen_time desc ");
+            // 0번째 부터 5개의 자료만 출력해라.
+            query.append("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
 
 
             var pstmt = conn.prepareStatement(query.toString());
             pstmt.setString(1, question);
             pstmt.setString(2, question);
+            pstmt.setInt(3, start);
+            pstmt.setInt(4, number);
             var result = pstmt.executeQuery();
 
             var maxLen = 50;
@@ -141,6 +145,33 @@ public class NoticeBoardDAO {
         }
         return re;
     }
+
+    // 게시판 목록 수 가져오기
+    public int getCount(String question){
+        // var query = "select count(sid) from notice_board";
+        var query = new StringBuilder();
+        query.append("select count(sid) from ");
+        query.append(tableName);
+        query.append(" where title like '%'||?||'%' or main_text like '%'||?||'%'");
+        int re = 0;
+        try{
+            Connection();
+            var pstmt = conn.prepareStatement(query.toString());
+            pstmt.setString(1, question);
+            pstmt.setString(2, question);
+            var result = pstmt.executeQuery();
+            if(result.next()){
+                re = result.getInt(1);
+            }
+        }catch(Exception e){
+            e.printStackTrace();
+            re = 0;
+        }finally{
+            Close();
+        }
+        return re;
+    }
+
     private long genSid(){
         long sid = -2;
         Connection();

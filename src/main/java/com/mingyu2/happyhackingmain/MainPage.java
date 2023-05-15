@@ -128,7 +128,7 @@ public class MainPage extends HttpServlet{
             // 메뉴
             var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
             menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+"?q=", false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+"?page=1&q=", false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
 
@@ -147,28 +147,139 @@ public class MainPage extends HttpServlet{
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             request.setAttribute("menus", menus);
 
+            var p = request.getParameter("page");
+
+            // 현재 페이지
+            var page = 1;
+            try {
+                page = Integer.parseInt(p);
+                if(page < 1){
+                    page = 1;
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+                page=1;
+            }
+            System.out.println(page);
+
             var q = request.getParameter("q"); // null or "" 면 모든 데이터 다 보여주기
             System.out.println(q);
 
             var noticeBoardDAO = new NoticeBoardDAO(getServletContext());
 
-            try{
-                if(q == null){
-                    // 모든 데이터 다 가져오기.
-                    var array = noticeBoardDAO.getNoticeList("");
-                    request.setAttribute("noticeBoard", array);
-                }else{ 
-                    // 검색 데이터만 가져오기.
-                    var array = noticeBoardDAO.getNoticeList(q);
-                    request.setAttribute("noticeBoard", array);
+            // 모든 데이터 다 가져오기.
+            if(q == null){
+                q="";
+            }
+
+            // 검색 결과 총 게시글 수 알아보기
+            int cnt = noticeBoardDAO.getCount(q);
+            System.out.println("검색 개시글 수 : "+cnt);
+
+
+            // ****** 클라이언트가 수정 가능 *******
+            // 한 페이지 보여줄 데이터 갯수 정하기
+            int number = 5;
+            // ****** 클라이언트가 수정 가능 *******
+
+            // 마지막 페이지
+            int lastPage = (cnt/number)+((cnt%number == 0)?0:1);
+            // 최대 페이지 수를 초과하면 가장 마지막 페이지로 이동한다.
+            if(page > lastPage){
+                response.sendRedirect(noticeBoard+"?page="+lastPage+"&q="+q);
+                return true;
+            }
+            // 데이터 시작 위치
+            int start = (page-1)*number;
+            
+
+            // 검색 데이터 가져오기.
+            var array = noticeBoardDAO.getNoticeList(q,start,number);
+
+
+            //***** 페이징 정보 *****
+            var pagination=new ArrayList<Integer>();
+
+
+            // ****** 클라이언트가 수정 가능 *******
+            var paginationBase = 5; // 기본이되는 페이징 홀수
+            // ****** 클라이언트가 수정 가능 *******
+
+            pagination.add(page);
+
+            // 페이징을 배열에 저장한다.
+            var leftEnd = false;
+            var rightEnd = false;
+            for(int i = 0, left=page, right=page;i<paginationBase-1;){
+                // left
+                if(left > 1){
+                    left -=1;
+                    pagination.add(0, left);
+                    i++;
+                }else {
+                    leftEnd=true;
                 }
-            }catch(Exception e){
-                e.printStackTrace();
+                // right
+                if(right < lastPage){
+                    right+=1;
+                    pagination.add(right);
+                    i++;
+                }else {
+                    rightEnd=true;
+                }
+
+                if(leftEnd && rightEnd){
+                    break;
+                }
             }
 
 
+            // 첫번째 페이지와 마지막 페이지를 포함해야 하는지 검사한다. 포함해야 하면 포함시킨다.
+            // 0 은 생략을 의미한다.
+            // prev 1 ... 3 4 5 6 next
+            var f = pagination.get(0);
+            if(f != 1){
+                if(f != 2){
+                    pagination.add(0,0);
+                }
+                pagination.add(0,1);
+            }
+
+            var l = pagination.get(pagination.size()-1);
+            if(l != lastPage){
+                if(l != lastPage-1){
+                    pagination.add(0);
+                }
+                pagination.add(lastPage);
+            }
+
+            //***** 페이징 정보 end *****
+
+            
+            //***** mainpage 로 페이징 정보 넘겨주기 *****
+
+            request.setAttribute("noticeBoard", array); // 검색 결과 jsp 로 전달함.
             request.setAttribute("noticeBoardWrite", noticeBoardWrite); // new write
             request.setAttribute("noticeBoardDetail", noticeBoardDetail); // show detail
+
+            // 페이지 번호를 위한 것
+            // 현재 페이지 정보 page
+            request.setAttribute("currentPage", page);
+            // 마지막 Page
+            request.setAttribute("lastPage", lastPage);
+            // 질문 
+            request.setAttribute("question", q);
+            // baseURL
+            request.setAttribute("noticeBoardURL", noticeBoard);
+            // 검색된 글 수
+            request.setAttribute("countNotices", cnt);
+
+            // 페이징 번호 리스트
+            request.setAttribute("pagination", pagination);
+
+            //***** mainpage 로 페이징 정보 넘겨주기 end*****
+
+            System.out.println(pagination);
 
             return mainPage(request, response, 2);
         }
