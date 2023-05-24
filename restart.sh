@@ -4,11 +4,11 @@ sleep 0.5
 rm -r bin/classes/*
 echo "삭제 완료"
 sleep 0.3
-javac -cp lib/*.jar -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/login/Login.java
+javac -cp "lib/*" -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/login/Login.java
 echo "컴파일 완료1"
-javac -cp lib/*.jar -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/happyhackingmain/MainPage.java
+javac -cp "lib/*" -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/happyhackingmain/MainPage.java
 echo "컴파일 완료2"
-javac -cp lib/*.jar -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/login/Logout.java
+javac -cp "lib/*" -sourcepath src/main/java/ -d bin/classes/ ./src/main/java/com/mingyu2/login/Logout.java
 echo "컴파일 완료3"
 sleep 0.3
 cp -r ./bin/classes/* ~/webServer/myWeb/ROOT/WEB-INF/classes/

@@ -1,6 +1,10 @@
 package com.mingyu2.happyhackingmain;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
@@ -14,6 +18,7 @@ import com.mingyu2.login.authentication.LoginAuthentication;
 import com.mingyu2.login.authentication.database.User;
 
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +26,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 public class MainPage extends HttpServlet{
     private String sessionUserName = UserName.getUsername();
+    private final int MAX_FILE_NUM = 2;
     @Override
     public void init() throws ServletException {
         var context = getServletContext();
@@ -119,6 +125,9 @@ public class MainPage extends HttpServlet{
         var noticeBoardModify = "/main_page/notice_board/notice_modify";
         var noticeBoardModifySave = "/main_page/notice_board/notice_modify_save";
         var noticeBoardDelete = "/main_page/notice_board/notice_delete";
+
+        var noticeBoardFileDownload = "/main_page/notice_board/notice_file_download";
+        var noticeBoardFileDelete = "/main_page/notice_board/notice_file_delete";
         
         if(uri.matches("/main_page[/]?")){
             // 메인페이지를 보여준다.
@@ -292,27 +301,91 @@ public class MainPage extends HttpServlet{
         }
         // 글 저장
         if(request.getMethod().equals("POST") && uri.equals(noticeBoardSave)){
+            var charSet = "utf-8";
+            request.setCharacterEncoding(charSet);
+            if(!request.getContentType().toLowerCase().startsWith("multipart/form-data")){
+                //404 에러 발생 
+                // application/x-www-form-urlencoded 타입이 아니라.
+                // 오직 multipart/form-data 타입만 받는다.
+                return false;
+            }
+            
+            // 게시판 정보 저장
             var title = request.getParameter("title");
             var mainText = request.getParameter("main-text");
 
             var result = "";
             if(title.equals("") || mainText.equals("")){
                 result = "<script>alert('fail');location.href='"+noticeBoardWrite+"'</script>";
-                simpleAlert(response, result);
+                simplePage(response, result);
                 return true;
             }
             
             // 저장
             var user = (User)request.getAttribute("user");
             var notice = new NoticeBoardDAO(getServletContext());
-            if(!notice.saveNotice(user, title, mainText)){
+            var genTime = System.currentTimeMillis(); // 게시글 생성 시각
+            var noticeSid = notice.saveNotice(user, title, mainText,genTime);
+            
+            if(noticeSid == 0){ // 저장 실패
                 result = "<script>alert('fail');location.href='"+noticeBoardWrite+"'</script>";
-                simpleAlert(response, result);
+                simplePage(response, result);
                 return true;
             }
 
-            result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
-            simpleAlert(response, result);
+            // ***** 파일 업로드 시작 *****
+            var noticeRe = "no file";
+            try{
+                // 폴더 생성 또는 존재 확인
+                //  
+
+                // 저장을 위한 폴더
+                var folderName = genTime+"_"+ noticeSid;
+                var uploadPath = getFilePath(request, folderName);
+                // genTime + _ + noticeSID => 폴더명
+                var parts = request.getParts();
+                for(var part:parts){
+                    if(!part.getHeader("Content-Disposition").contains("filename=")){
+                        continue;
+                    }
+                    if(part.getSubmittedFileName().equals("")){
+                        continue;
+                    }
+                    var file = new File(uploadPath);
+                    if(!file.exists()){
+                        // 폴더 생성
+                        file.mkdir();
+                        System.out.println(noticeSid+"게시글 폴더 생성 함");
+                    }
+
+                    var count = file.listFiles().length;
+                    if(count > MAX_FILE_NUM){
+                        System.out.println("최대 파일 갯수 초과");
+                        break;
+                    }
+
+                    System.out.println("퐅더 존재? => "+file.isDirectory());
+
+                    System.out.println("타입 : "+part.getHeader("Content-Disposition"));
+                    System.out.println("크기 : "+part.getSize());
+                    System.out.println("이름 : "+part.getSubmittedFileName());
+
+                    part.write(uploadPath+File.separator+part.getSubmittedFileName());
+                    part.delete(); // 임시파일 삭제
+
+                    System.out.println("업로드 성공");
+                    noticeRe = "file upload success";
+                    System.out.println("경로 : "+uploadPath);
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+                System.out.println("파일 업로드 실패");
+                noticeRe = "file upload fail";
+            }
+            // ***** 파일 업로드 end *****
+
+            result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+"?page=1&q='</script>";
+            simplePage(response, result);
             return true;
         }
         // 글 자세히 보기
@@ -326,19 +399,55 @@ public class MainPage extends HttpServlet{
 
                 var user = (User)request.getAttribute("user");
 
-                if(notice != null){
-                    request.setAttribute("notice", notice);
-
-                    if(user.getSid() == notice.getUserSID()){
-                        request.setAttribute("modifyButton", true);
-                        request.setAttribute("modifyHref", noticeBoardModify);
-                        request.setAttribute("deleteHref", noticeBoardDelete);
-                    }
-                    
-                    gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_detail.jsp");
-                    return true;
+                if(notice == null){
+                    return false;
                 }
+                // 게시글 조회수 1 증가 시키기.
+                var noticeSID = notice.getSid();
+                noticeDAO.incressViews(noticeSID, notice.getViews());
+                notice = noticeDAO.getNotice(noticeSID);
+
+                if(notice == null){
+                    return false;
+                }
+                // 게시글 조회수 증가 end
+
+                // *** 파일들 읽어 오기 ***
+                // href 링크 만들기
+                var folderName = notice.getGenTime()+"_"+noticeSID;
+                var uploadPath = getFilePath(request, folderName);
+                // 파일 다운로드 get 파라미터 이름
+                var fileNameList = new ArrayList<Pair<String,String>>();
+                try{
+                    var folder = new File(uploadPath); // 폴더
+                    if(folder.exists()){
+                        var files = folder.listFiles(); // 파일들
+                        for(var file : files) {
+                            var fileName = file.getName();
+                            var hrefPrameter = folderName+"%2F"+fileName;
+                            fileNameList.add(new Pair<String,String>(fileName,hrefPrameter));
+                            System.out.println(fileNameList);
+                        }
+                    }
+                }catch(Exception e){
+                    e.printStackTrace();
+                }
+                request.setAttribute("fileNameList", fileNameList);
+                request.setAttribute("noticeBoardFileDownload", noticeBoardFileDownload);
+                // *** 파일들 읽어 오기 end ***
+
+                request.setAttribute("notice", notice);
+
+                if(user.getSid() == notice.getUserSID()){
+                    request.setAttribute("modifyButton", true);
+                    request.setAttribute("modifyHref", noticeBoardModify);
+                    request.setAttribute("deleteHref", noticeBoardDelete);
+                }
+                
+                gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_detail.jsp");
+                return true;
             }catch(Exception e){
+                e.printStackTrace();
                 return false;
             }
         }
@@ -360,6 +469,32 @@ public class MainPage extends HttpServlet{
                     return false;
                 }
 
+                var noticeSID = notice.getSid();
+                var folderName = notice.getGenTime()+"_"+noticeSID;
+                var uploadPath = getFilePath(request, folderName);
+                // 파일 다운로드 get 파라미터 이름
+                var fileNameList = new ArrayList<Pair<String,String>>();
+                try{
+                    var folder = new File(uploadPath); // 폴더
+                    if(folder.exists()){
+                        var files = folder.listFiles(); // 파일들
+                        for(var file : files) {
+                            var fileName = file.getName();
+                            var hrefPrameter = folderName+"%2F"+fileName;
+                            fileNameList.add(new Pair<String,String>(fileName,hrefPrameter));
+                            System.out.println(fileNameList);
+                        }
+                    }
+                }catch(Exception e){
+                    e.printStackTrace();
+                }
+                request.setAttribute("fileNameList", fileNameList);
+                request.setAttribute("noticeBoardFileDownload", noticeBoardFileDownload);
+                request.setAttribute("noticeBoardFileDelete", noticeBoardFileDelete);
+                // *** 파일들 읽어 오기 end ***
+
+                request.setAttribute("modifyMode",true);
+
                 request.setAttribute("noticeBoardURL", noticeBoardModifySave); // 수정 저장 URL
                 
                 request.setAttribute("noticeID", sid); // 페이지 아이디
@@ -369,6 +504,7 @@ public class MainPage extends HttpServlet{
                 System.out.println(notice.getUserSID() + "  "+ user.getSid() + "글 수정모드");
 
                 gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_write.jsp");
+                return true;
             }catch(Exception e){
                 System.out.println(e.getMessage());
                 return false;
@@ -396,24 +532,82 @@ public class MainPage extends HttpServlet{
                     return false;
                 }
 
+                // 전 저장위치
+                var noticeSID = notice.getSid();
+                var beforeFolderName = notice.getGenTime()+"_"+noticeSID;
+                var beforeUploadPath = getFilePath(request, beforeFolderName);
+                
                 // 글 삭제
                 if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
                     return false;
                 }
                 
                 // 새로운 글 저장
-                if(!noticeDAO.saveNotice(user, title, mainText)){ // 실패
+                var genTime = System.currentTimeMillis();
+                var newSid = noticeDAO.saveNotice(user, title, mainText, genTime);
+                if(newSid==0){ // 실패
                     result = "<script>alert('fail');location.href='"+noticeBoard+"'</script>";
-                    simpleAlert(response, result);
+                    simplePage(response, result);
                     return true;
                 }
 
+                var noticeRe = "no new file";
+                try {
+                    var folder = new File(beforeUploadPath); // 폴더
+
+                    var newFolderName = genTime+"_"+newSid;
+                    var afterUploadPath = getFilePath(request, newFolderName);
+                    var newFolder = new File(afterUploadPath);
+                    if(folder.exists()){ 
+                        // 폴더 이름만 변경.
+                        folder.renameTo(newFolder);
+                    }
+                    // 
+                    var parts = request.getParts();
+                    for(var part:parts){
+                        if(!part.getHeader("Content-Disposition").contains("filename=")){
+                            continue;
+                        }
+                        if(part.getSubmittedFileName().equals("")){
+                            continue;
+                        }
+                        if(!newFolder.exists()){
+                            // 폴더 생성
+                            newFolder.mkdir();
+                            System.out.println(newSid+"게시글 폴더 생성 함");
+                        }
+                        
+                        var count = newFolder.listFiles().length;
+                        System.out.println("파일 갯수 : "+count);
+                        if(count > MAX_FILE_NUM){
+                            System.out.println("최대 파일 갯수 초과");
+                            noticeRe = "out of file number ( maxcount 3 )";
+                            break;
+                        }
+
+                        System.out.println("퐅더 존재? => "+newFolder.isDirectory());
+
+                        System.out.println("타입 : "+part.getHeader("Content-Disposition"));
+                        System.out.println("크기 : "+part.getSize());
+                        System.out.println("이름 : "+part.getSubmittedFileName());
+                        part.write(afterUploadPath+File.separator+part.getSubmittedFileName());
+                        part.delete(); // 임시 파일 삭제
+
+                        System.out.println("파일 저장 성공");
+                        noticeRe = "file upload success";
+                        System.out.println("경로 : "+afterUploadPath);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    noticeRe = "file upload fail";
+                }
                 // 성공
-                result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
-                simpleAlert(response, result);
+                result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+"'</script>";
+                simplePage(response, result);
                 return true;
             }catch(Exception e){
                 e.printStackTrace();
+                return false;
             }
         }
 
@@ -428,7 +622,7 @@ public class MainPage extends HttpServlet{
 
                 if(notice == null) {
                     result = "<script>alert('do not exist.');location.href='"+noticeBoard+"'</script>";
-                    simpleAlert(response, result);
+                    simplePage(response, result);
                     return true;
                 }
 
@@ -441,17 +635,147 @@ public class MainPage extends HttpServlet{
                 // 글 삭제
                 if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
                     result = "<script>alert('fail');location.href='"+noticeBoard+"'</script>";
-                    simpleAlert(response, result);
+                    simplePage(response, result);
                     return true;
                 }
                 System.out.println("**** 게시글 삭제 끝 ****");
 
+                // *** 파일 업로드 폴더 삭제 ***
+                var folderName = notice.getGenTime()+"_"+notice.getSid();
+                var uploadPath = getFilePath(request, folderName);
+                var folder = new File(uploadPath);
+                if(folder.exists()){
+                    var files = folder.listFiles();
+                    // 모든 파일 삭제
+                    for(var file : files){
+                        file.delete();
+                    }
+                    // 마지막으로 폴더 삭제
+                    folder.delete();
+                }
+                // *** 파일 업로드 폴더 삭제 end ***
+
                 result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
-                simpleAlert(response, result);
+                simplePage(response, result);
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+
+        // 게시글 파일 다운로드
+        if(uri.equals(noticeBoardFileDownload)){
+            var downlink = request.getParameter("downlink");
+            var filePath = new String(getFilePath(request, downlink).getBytes("UTF-8")); // utf-8로 바꿔준다.
+
+            var file = new File(filePath);
+            if(!file.exists()){
+                return false;
+            }
+            if(!file.isFile()){
+                return false;
+            }
+
+            var filesize = file.length();
+
+            var sMimeType = getServletContext().getMimeType(filePath); // 확장자에 따라 달라진다.
+            if(sMimeType == null || sMimeType.length() == 0){
+                sMimeType = "application/octet-stream";
+            }
+            BufferedInputStream fin = null;
+            BufferedOutputStream outs = null;
+            try {
+                var fileName= downlink.split("/")[1];
+                byte[] b = new byte[8192];
+
+                response.setContentType(sMimeType+"; charset=utf-8");
+
+                var userAgent = request.getHeader("User-Agent");
+                System.out.println(userAgent);
+                if(userAgent != null && userAgent.contains("MSIE 5.5")){ // MSIE 5.5 이하
+                    return false;
+                }else if(userAgent != null && userAgent.contains("MSIE")){ // MS IE
+                    return false;
+                }else{ // 모질라
+                    response.setHeader("Content-Disposition", "attachment; filename="+ new String(fileName.getBytes("utf-8"), "latin1") + ";");
+                }
+
+                // 파일 사이즈 정확히 알아야함
+                if(filesize > 0){
+                    response.setHeader("Content-Length", ""+filesize);
+                }
+                
+                fin = new BufferedInputStream(new FileInputStream(file));
+                outs = new BufferedOutputStream(response.getOutputStream());
+                int read = 0;
+                while((read= fin.read(b)) != -1){
+                    outs.write(b, 0, read);
+                }
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            } finally {
+                try{
+                    fin.close();
+                }catch(Exception e){}
+                try{
+                    outs.close();
+                }catch(Exception e){}
+            }
+            return true;
+        }
+
+
+        // 파일 삭제
+        if(request.getMethod().equals("GET") && uri.equals(noticeBoardFileDelete)){
+            var re = "fail";
+            try{
+                var noticeID = request.getParameter("noticeID");
+                var filename = request.getParameter("filename");
+
+                var sid = Long.parseLong(noticeID);
+                var noticeDAO = new NoticeBoardDAO(getServletContext());
+                var notice = noticeDAO.getNotice(sid);
+
+                if(notice == null) {
+                    System.out.println("존재하지 않는 게시글");
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+
+                var user = (User)request.getAttribute("user");
+                if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함 실패
+                    System.out.println("글 작성자와 현재유저 일치 안함");
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+
+                // 파일 존재 여부 확인
+                var folderName = notice.getGenTime()+"_"+notice.getSid();
+                var filePath = getFilePath(request, folderName+File.separatorChar+filename);
+                var file = new File(filePath);
+                if(!file.exists()){
+                    System.out.println("파일 존재 안함!");
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+                if(!file.isFile()){
+                    System.out.println("파일이 아님!");
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+
+                // 파일 삭제 하기.
+                if(file.delete()){
+                    re = "success";
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+                re = "fail";
+            }
+            simplePage(response, "{\"result\":\""+re+"\"}");
+            return true;
         }
 
 
@@ -463,7 +787,11 @@ public class MainPage extends HttpServlet{
         }
         return false;
     }
-    private void simpleAlert(ServletResponse response, String result) throws IOException{
+    private String getFilePath(ServletRequest request,String folderName){
+        var path = request.getServletContext().getRealPath("/WEB-INF/upload_folder/"+folderName);
+        return path;
+    }
+    private void simplePage(ServletResponse response, String result) throws IOException{
         var sb = new StringBuilder();
         sb.append(result);
         var out = new BufferedWriter(new OutputStreamWriter(response.getOutputStream()));

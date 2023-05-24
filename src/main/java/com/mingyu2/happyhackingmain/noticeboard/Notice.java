@@ -7,6 +7,7 @@ public class Notice {
     private long genTime;
     private String title;
     private String mainText;
+    private long views;
     
     public Notice(
         long sid,
@@ -14,7 +15,8 @@ public class Notice {
         String username,
         long genTime,
         String title,
-        String mainText
+        String mainText,
+        long views
     ){
         this.sid = sid;
         this.userSID = userSID;
@@ -22,6 +24,7 @@ public class Notice {
         this.genTime = genTime;
         this.title = title;
         this.mainText = mainText;
+        this.views = views;
     }
 
     public long getSid() {
@@ -41,6 +44,9 @@ public class Notice {
     }
     public String getMainText() {
         return filter(mainText);
+    }
+    public long getViews(){
+        return views;
     }
 
     // xss 방지

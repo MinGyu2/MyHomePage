@@ -13,4 +13,8 @@ public final class Pair<T,M> {
     public M getD2() {
         return d2;
     }
+    @Override
+    public String toString() {
+        return d1+" : "+d2;
+    }
 }

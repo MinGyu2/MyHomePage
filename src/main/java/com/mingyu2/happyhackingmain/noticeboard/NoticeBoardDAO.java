@@ -32,7 +32,8 @@ public class NoticeBoardDAO {
                     result.getString(3), 
                     result.getLong(4),
                     result.getString(5), 
-                    result.getString(6)
+                    result.getString(6),
+                    result.getLong(7)
                 );
             }
         }catch(Exception e){
@@ -74,7 +75,8 @@ public class NoticeBoardDAO {
                     result.getString(3), 
                     result.getLong(4),
                     result.getString(5), 
-                    mainText.substring(0, (mainText.length() < maxLen)?mainText.length():maxLen)
+                    mainText.substring(0, (mainText.length() < maxLen)?mainText.length():maxLen),
+                    result.getLong(7)
                 );
                 arr.add(notice);
             }
@@ -88,13 +90,13 @@ public class NoticeBoardDAO {
 
     
     // 게시판 저장
-    public boolean saveNotice(User user, String title, String mainText){
-        var re = false;
+    public long saveNotice(User user, String title, String mainText, long genTime){ // 0 이면 false
+        long re = 0;
 
         var sid = genSid();
         var userSid = user.getSid();
         var username = user.getUsername();
-        var genTime = System.currentTimeMillis();
+        // var genTime = System.currentTimeMillis();
         // insert into 
         // notice_board (sid,user_sid,username,gen_time,title,main_text)
         // values (1,1,'mq',0,'제목','본문');
@@ -102,8 +104,8 @@ public class NoticeBoardDAO {
         var query = new StringBuilder();
         query.append("insert into ");
         query.append(tableName);
-        query.append(" (sid,user_sid,username,gen_time,title,main_text) ");
-        query.append("values (?,?,?,?,?,?)");
+        query.append(" (sid,user_sid,username,gen_time,title,main_text,views) ");
+        query.append("values (?,?,?,?,?,?,?)");
         System.out.println("저장전 " + query.toString());
 
         try{
@@ -115,12 +117,12 @@ public class NoticeBoardDAO {
             pstmt.setLong(4, genTime);
             pstmt.setString(5, title);
             pstmt.setString(6, mainText);
-
+            pstmt.setLong(7, 0);
             System.out.println("update "+ pstmt.executeUpdate());
-            re = true;
+            re = sid;
         }catch(Exception e){
             System.out.println(e.getMessage());
-            re = false;
+            re = 0;
         }finally{
             Close();
         }
@@ -170,6 +172,26 @@ public class NoticeBoardDAO {
             Close();
         }
         return re;
+    }
+
+    // 조회수 1 카운트 증가시키기
+    public long incressViews(long sid, long currentViews){
+        var query = new StringBuilder();
+        query.append("update notice_board set views = ");
+        query.append(currentViews+1);
+        query.append(" where sid=");
+        query.append(sid);
+        try{
+            Connection();
+            var pstmt = conn.prepareStatement(query.toString());
+            var re = pstmt.executeUpdate();
+            System.out.println(sid+" 글 조회수 업데이트 : "+re);
+        }catch(Exception e){
+            e.printStackTrace();
+        }finally{
+            Close();
+        }
+        return sid;
     }
 
     private long genSid(){
