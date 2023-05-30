@@ -92,6 +92,8 @@ public class Login extends HttpServlet{
             return;
         }
         var msg = request.getParameter("msg");
+        // msg html 태그를 html entity로 치환하기.
+        msg = filter(msg);
         request.setAttribute("signInMSG", msg);
 
         String title = "Happy Hacking";
@@ -226,5 +228,27 @@ public class Login extends HttpServlet{
     private void gotoForwardPage(HttpServletRequest request, HttpServletResponse response, String path) throws ServletException, IOException  {
         var dispatcher = request.getRequestDispatcher(path);
         dispatcher.forward(request, response); 
+    }
+
+    // xss 방지
+    private String filter(String in){
+        // 순서데로 해야한다.
+        // & &amp;  이게 무조건 첫번째로 와야한다.
+        // < &lt;
+        // > &gt;
+        // ' &#x27;
+        // " &quot;
+        // ( &#40;
+        // ) &#41;
+        // / &#x2F;
+        var re = in.replaceAll("[&]", "&amp;")
+                .replaceAll("[<]", "&lt;")
+                .replaceAll("[>]", "&gt;")
+                .replaceAll("[']", "&#x27;")
+                .replaceAll("[\"]", "&quot;")
+                .replaceAll("[(]", "&#40;")
+                .replaceAll("[)]", "&#41;")
+                .replaceAll("[/]", "&#x2F;");
+        return re;
     }
 }
