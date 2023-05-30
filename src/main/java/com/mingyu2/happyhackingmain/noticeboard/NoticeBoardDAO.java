@@ -18,11 +18,14 @@ public class NoticeBoardDAO {
     }
     public Notice getNotice(long sid){
         Notice notice = null;
-        var query = "select * from notice_board where sid=?";
+        var query = new StringBuilder();
+        query.append("select * from ");
+        query.append(tableName);
+        query.append(" where sid=?");
         
         try{
             Connection();
-            var pstmt = conn.prepareStatement(query);
+            var pstmt = conn.prepareStatement(query.toString());
             pstmt.setLong(1,sid);
             var result = pstmt.executeQuery();
             if(result.next()){
@@ -132,10 +135,13 @@ public class NoticeBoardDAO {
     public boolean deleteNotice(long sid){
         var re = false;
         // delete from notice_board where sid=13;
-        var query = "delete from notice_board where sid=?";
+        var query = new StringBuilder();
+        query.append("delete from ");
+        query.append(tableName);
+        query.append(" where sid=?");
         try {
             Connection();
-            var pstmt = conn.prepareStatement(query);
+            var pstmt = conn.prepareStatement(query.toString());
             pstmt.setLong(1,sid);
             pstmt.executeUpdate();
             System.out.println("삭제 완료");
@@ -177,7 +183,9 @@ public class NoticeBoardDAO {
     // 조회수 1 카운트 증가시키기
     public long incressViews(long sid, long currentViews){
         var query = new StringBuilder();
-        query.append("update notice_board set views = ");
+        query.append("update ");
+        query.append(tableName);
+        query.append(" set views = ");
         query.append(currentViews+1);
         query.append(" where sid=");
         query.append(sid);
