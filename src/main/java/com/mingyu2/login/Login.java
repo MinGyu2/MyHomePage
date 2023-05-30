@@ -93,6 +93,9 @@ public class Login extends HttpServlet{
         }
         var msg = request.getParameter("msg");
         // msg html 태그를 html entity로 치환하기.
+        if(msg == null){
+            msg = "";
+        }
         msg = filter(msg);
         request.setAttribute("signInMSG", msg);
 
