@@ -20,10 +20,16 @@ import com.mingyu2.login.authentication.database.User;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+@MultipartConfig(
+    maxFileSize = -1,
+    maxRequestSize = -1,
+    fileSizeThreshold = 1024
+)
 public class MainPage extends HttpServlet{
     private String sessionUserName = UserName.getUsername();
     private final int MAX_FILE_NUM = 2;
