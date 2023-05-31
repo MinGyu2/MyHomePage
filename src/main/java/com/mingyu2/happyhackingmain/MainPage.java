@@ -430,7 +430,7 @@ public class MainPage extends HttpServlet{
                         var files = folder.listFiles(); // 파일들
                         for(var file : files) {
                             var fileName = file.getName();
-                            var hrefPrameter = folderName+"%2F"+fileName;
+                            var hrefPrameter = fileName;
                             fileNameList.add(new Pair<String,String>(fileName,hrefPrameter));
                             System.out.println(fileNameList);
                         }
@@ -671,7 +671,20 @@ public class MainPage extends HttpServlet{
 
         // 게시글 파일 다운로드
         if(uri.equals(noticeBoardFileDownload)){
-            var downlink = request.getParameter("downlink");
+            var result = "";
+            System.out.println("**** 게시글 다운 시작 ****");
+            var sid = Long.parseLong(request.getParameter("pageid"));
+            var noticeDAO = new NoticeBoardDAO(getServletContext());
+            var notice = noticeDAO.getNotice(sid);
+
+            if(notice == null) {
+                result = "<script>alert('do not exist.');location.href='"+noticeBoard+"'</script>";
+                simplePage(response, result);
+                return true;
+            }
+            var fileFolder = notice.getGenTime()+"_"+notice.getSid();
+            
+            var downlink = fileFolder+File.separatorChar+request.getParameter("downlink");
             var filePath = new String(getFilePath(request, downlink).getBytes("UTF-8")); // utf-8로 바꿔준다.
 
             var file = new File(filePath);
@@ -794,7 +807,16 @@ public class MainPage extends HttpServlet{
         return false;
     }
     private String getFilePath(ServletRequest request,String folderName){
-        var path = request.getServletContext().getRealPath("/WEB-INF/upload_folder/"+folderName);
+        // var path = new File(request.getServletContext().getRealPath("")).getParent() + File.separatorChar+folderName;
+        
+        // 업로드 폴더 존재 확인 업로드 폴더 존재안하면 만들어주기. 
+        // 링크를 통해 접근할 수 없는 위치에 만들어주기.
+        var path = new File(request.getServletContext().getRealPath("")).getParentFile().getParent()+File.separatorChar+"upload_folder";
+        var folder = new File(path);
+        if(!folder.exists() || !folder.isDirectory()){
+            folder.mkdir(); // 업로드 폴더 만들기.
+        }
+        path = path + File.separatorChar + folderName;
         return path;
     }
     private void simplePage(ServletResponse response, String result) throws IOException{
