@@ -1,5 +1,9 @@
 package com.mingyu2.happyhackingmain.noticeboard;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
 public class Notice {
     private long sid;
     private long userSID;
@@ -39,6 +43,13 @@ public class Notice {
     public long getGenTime() {
         return genTime;
     }
+    public String getGenDate(){
+        var obj = new SimpleDateFormat("dd MMM yyy HH:mm");
+        obj.setTimeZone(TimeZone.getTimeZone("Asia/Seoul")); // 타임존 한국
+        var res = new Date(genTime);
+        return obj.format(res);
+    }
+
     public String getTitle() {
         return filter(title);
     }

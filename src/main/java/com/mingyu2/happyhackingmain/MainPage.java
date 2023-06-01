@@ -7,7 +7,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.TimeZone;
 
 import com.mingyu2.database.DBConnection;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeBoardDAO;
@@ -143,7 +145,7 @@ public class MainPage extends HttpServlet{
             // 메뉴
             var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
             menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+"?page=1&q=", false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","",""), false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
 
@@ -162,9 +164,60 @@ public class MainPage extends HttpServlet{
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             request.setAttribute("menus", menus);
 
+            // 검색 옵션 option_val
+            // 1 제목+내용
+            // 2 작성자
+            // 3 제목
+            // 4 내용
+            var ov = request.getParameter("option_val");
+            var optionVal = 1;
+            try {
+                optionVal = Integer.parseInt(ov);
+            }catch(Exception e){
+                e.printStackTrace();
+                optionVal = 1;
+            }
+            if(optionVal > 4 || optionVal < 1){
+                optionVal = 1;
+            }
+
+            // 검색 날짜 범위
+            var dateFrom = request.getParameter("date_from");
+            var dateTo = request.getParameter("date_to");
+            if(dateFrom == null || dateTo == null){
+                dateFrom = "";
+                dateTo = "";
+            }else if(dateFrom.equals("") || dateTo.equals("")){
+                dateFrom = "";
+                dateTo = "";
+            }
+            // 날짜 유효한지 검사
+            var re = "(19|20)\\d{2}-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])";
+            if(!dateFrom.matches(re) || !dateTo.matches(re)){
+                dateFrom = "1980-01-01";
+                dateTo = "2999-12-31";
+            }
+
+            var obj = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+            obj.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
+            long from = 0;
+            long to = 0;
+            // long type 변환
+            try{
+                from = obj.parse(dateFrom+" 00:0").getTime();
+                to = obj.parse(dateTo+" 23:59").getTime();
+            }catch(Exception e){
+                from = 0;
+                to = Long.MAX_VALUE;
+                e.printStackTrace();
+            }
+            System.out.println(dateFrom+" ~ "+dateTo);
+            System.out.println("검색 날짜 : "+from + " ~ "+to + " "+System.currentTimeMillis());
+
+ 
+            // 현재 페이지
             var p = request.getParameter("page");
 
-            // 현재 페이지
             var page = 1;
             try {
                 page = Integer.parseInt(p);
@@ -188,8 +241,17 @@ public class MainPage extends HttpServlet{
             }
 
             // 검색 결과 총 게시글 수 알아보기
-            int cnt = noticeBoardDAO.getCount(q);
+            int cnt = noticeBoardDAO.getCount(optionVal,q, from, to);
             System.out.println("검색 개시글 수 : "+cnt);
+
+            if(cnt == 0){
+                // 검색된 글 수
+                request.setAttribute("countNotices", 0);
+                cnt = 1;
+            }else{
+                // 검색된 글 수
+                request.setAttribute("countNotices", cnt);
+            }
 
 
             // ****** 클라이언트가 수정 가능 *******
@@ -201,7 +263,8 @@ public class MainPage extends HttpServlet{
             int lastPage = (cnt/number)+((cnt%number == 0)?0:1);
             // 최대 페이지 수를 초과하면 가장 마지막 페이지로 이동한다.
             if(page > lastPage){
-                response.sendRedirect(noticeBoard+"?page="+lastPage+"&q="+q);
+                // response.sendRedirect(noticeBoard+"?page="+lastPage+"&q="+q);
+                response.sendRedirect(noticeBoard+baseNoticeBoardParameter(1,lastPage,q,"",""));
                 return true;
             }
             // 데이터 시작 위치
@@ -209,7 +272,7 @@ public class MainPage extends HttpServlet{
             
 
             // 검색 데이터 가져오기.
-            var array = noticeBoardDAO.getNoticeList(q,start,number);
+            var array = noticeBoardDAO.getNoticeList(optionVal,q,start,number, from, to);
 
 
             //***** 페이징 정보 *****
@@ -287,7 +350,12 @@ public class MainPage extends HttpServlet{
             // baseURL
             request.setAttribute("noticeBoardURL", noticeBoard);
             // 검색된 글 수
-            request.setAttribute("countNotices", cnt);
+            // request.setAttribute("countNotices", cnt);
+            // 검색 옵션 값 jsp 로 보내기
+            request.setAttribute("optionVal", optionVal);
+            // date from and date to
+            request.setAttribute("dateFrom", dateFrom);
+            request.setAttribute("dateTo", dateTo);
 
             // 페이징 번호 리스트
             request.setAttribute("pagination", pagination);
@@ -390,7 +458,8 @@ public class MainPage extends HttpServlet{
             }
             // ***** 파일 업로드 end *****
 
-            result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+"?page=1&q='</script>";
+            // result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+"?page=1&q='</script>";
+            result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1,1,"","","")+"'</script>";
             simplePage(response, result);
             return true;
         }
@@ -608,7 +677,7 @@ public class MainPage extends HttpServlet{
                     noticeRe = "file upload fail";
                 }
                 // 성공
-                result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+"'</script>";
+                result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1, 1, "","","")+"'</script>";
                 simplePage(response, result);
                 return true;
             }catch(Exception e){
@@ -805,6 +874,10 @@ public class MainPage extends HttpServlet{
             return (new LoginAuthMethods(sqlProbURI, context, request, response)).connectPage();
         }
         return false;
+    }
+    private String baseNoticeBoardParameter(int optionVal,int page,String q, String dateFrom, String dateTo){
+        // TODO 수정
+        return "?option_val="+optionVal+"&page="+page+"&q="+q+"&date_from="+dateFrom+"&date_to="+dateTo;
     }
     private String getFilePath(ServletRequest request,String folderName){
         // var path = new File(request.getServletContext().getRealPath("")).getParent() + File.separatorChar+folderName;
