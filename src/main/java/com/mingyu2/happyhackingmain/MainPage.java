@@ -41,7 +41,7 @@ public class MainPage extends HttpServlet{
 
         DBConnection.addDBINFO(context, "main", "/WEB-INF/db-info/main-db-info");
         DBConnection.addDBINFO(context, "prob", "/WEB-INF/db-info/problems-db-info");
-        DBConnection.addDBINFO(context, "noticeBoard", "/WEB-INF/db-info/main-notice-board-info");
+        DBConnection.addDBINFO(context, "noticeBoard", "/WEB-INF/db-info/main-db-info");
         // test
         // context.setAttribute("shareValue", "안녕 값 공유중이양!");
     }
