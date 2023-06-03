@@ -13,6 +13,7 @@ import java.util.TimeZone;
 
 import com.mingyu2.database.DBConnection;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeBoardDAO;
+import com.mingyu2.happyhackingmain.noticeboard.NoticeLikeDAO;
 import com.mingyu2.happyhackingmain.problems.problemauthentication.Problem1;
 import com.mingyu2.happyhackingmain.problems.problemsqlinjection.LoginAuthMethods;
 import com.mingyu2.login.SessionName.UserName;
@@ -136,6 +137,8 @@ public class MainPage extends HttpServlet{
 
         var noticeBoardFileDownload = "/main_page/notice_board/notice_file_download";
         var noticeBoardFileDelete = "/main_page/notice_board/notice_file_delete";
+
+        var noticeBoardLikes = "/main_page/notice_board/likes";
         
         if(uri.matches("/main_page[/]?")){
             // 메인페이지를 보여준다.
@@ -863,6 +866,65 @@ public class MainPage extends HttpServlet{
                 re = "fail";
             }
             simplePage(response, "{\"result\":\""+re+"\"}");
+            return true;
+        }
+
+        // 좋아요 설정 및 해제
+        if(request.getMethod().equals("POST") && uri.equals(noticeBoardLikes)){
+            var re = true;
+            long cnt = 0;
+
+            // true : 좋아요 한 다음 갯수 알아보기.
+            // false : 좋아요 취소한 다음 갯수 알아보기.
+            // confirm : 오직 좋아요 갯수만 알아보기.
+            var method = request.getParameter("like");
+            var noticeId = request.getParameter("pageid");
+
+            // like 검사, false 좋아요 해제
+            if(!(method.equals("true") || method.equals("false") || method.equals("confirm"))){
+                re = false;
+                cnt = 0;
+                simplePage(response, "{\"result\":\""+re+"\", \"likecount\":\""+cnt+"\"}");
+                return true;
+            }
+
+            // 존재하는 게시글인지 확인하기 아니면 fail! false 좋아요 해제
+            long noticeSid = 0;
+            try{
+                noticeSid = Long.parseLong(noticeId);
+                var noticeDAO = new NoticeBoardDAO(getServletContext());
+                var notice = noticeDAO.getNotice(noticeSid);
+                if(notice == null){
+                    re = false;
+                    cnt = 0;
+                    simplePage(response, "{\"result\":\""+re+"\", \"likecount\":\""+cnt+"\"}");
+                    return true;
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+
+            // 사용자 정보 가지고 오기
+            var user = (User)request.getAttribute("user");
+            
+            var noticeLikeDAO = new NoticeLikeDAO(getServletContext());
+
+            // 1. method 에 따른 계산 시작! 좋아요 증가 or 좋아요 삭제 등등
+            if(method.equals("true")){ // 좋아요 추가
+                noticeLikeDAO.addLike(user.getSid(), noticeSid);
+            }else if(method.equals("false")) { // 좋아요 삭제
+                noticeLikeDAO.deleteLike(user.getSid(), noticeSid);
+            } //method 가 confirm 일 때는 pass
+
+            // 2. 사용자 좋아요 싫어요 여부 확인
+            var isLikeUser = noticeLikeDAO.isUserLike(user.getSid(), noticeSid);
+            re = isLikeUser;
+
+            // 3. 게시글 좋아요 갯수 카운트
+            cnt = noticeLikeDAO.getCount(noticeSid);
+
+            System.out.println("좋아용 "+method+" "+noticeId+"  like count : "+cnt);
+            simplePage(response, "{\"result\":\""+re+"\", \"likecount\":\""+cnt+"\"}");
             return true;
         }
 

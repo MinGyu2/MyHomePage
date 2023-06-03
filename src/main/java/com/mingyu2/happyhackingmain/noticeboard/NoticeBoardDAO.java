@@ -13,7 +13,9 @@ public class NoticeBoardDAO {
     private Connection conn;
 
     private DBConnection dbConn;
+    private ServletContext context;
     public NoticeBoardDAO(ServletContext context){
+        this.context = context;
         dbConn = new DBConnection(context, "noticeBoard");
     }
     public Notice getNotice(long sid){
@@ -29,14 +31,17 @@ public class NoticeBoardDAO {
             pstmt.setLong(1,sid);
             var result = pstmt.executeQuery();
             if(result.next()){
+                var noticeSid = result.getLong(1);
+                long likes = new NoticeLikeDAO(context).getCount(noticeSid);
                 notice = new Notice(
-                    result.getLong(1), 
+                    noticeSid, 
                     result.getLong(2), 
                     result.getString(3), 
                     result.getLong(4),
                     result.getString(5), 
                     result.getString(6),
-                    result.getLong(7)
+                    result.getLong(7),
+                    likes
                 );
             }
         }catch(Exception e){
@@ -103,15 +108,19 @@ public class NoticeBoardDAO {
             System.out.println("no?");
             var maxLen = 50;
             while(result.next()){
+                var noticeSid = result.getLong(1);
+                long likes = new NoticeLikeDAO(context).getCount(noticeSid);
+
                 var mainText = result.getString(6);
                 var notice = new Notice(
-                    result.getLong(1), 
+                    noticeSid, 
                     result.getLong(2), 
                     result.getString(3), 
                     result.getLong(4),
                     result.getString(5), 
                     mainText.substring(0, (mainText.length() < maxLen)?mainText.length():maxLen),
-                    result.getLong(7)
+                    result.getLong(7),
+                    likes
                 );
                 arr.add(notice);
             }
@@ -166,6 +175,9 @@ public class NoticeBoardDAO {
     }
     // 삭제
     public boolean deleteNotice(long sid){
+        // 좋아요 테이블에서 게시글과 관련된 좋아요 기록 모두 삭제
+        new NoticeLikeDAO(context).deleteNoticeLike(sid);
+
         var re = false;
         // delete from notice_board where sid=13;
         var query = new StringBuilder();
