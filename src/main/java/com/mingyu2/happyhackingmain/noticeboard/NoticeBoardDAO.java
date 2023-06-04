@@ -10,6 +10,7 @@ import jakarta.servlet.ServletContext;
 
 public class NoticeBoardDAO {
     private String tableName = "notice_board";
+    private String likeTableName = "likes";
     private Connection conn;
 
     private DBConnection dbConn;
@@ -59,9 +60,12 @@ public class NoticeBoardDAO {
     // 3 제목
     // 4 내용
     // 날짜 범위
-    public ArrayList<Notice> getNoticeList(int optionVal,String question, int start, int number, long from, long to){
+    public ArrayList<Notice> getNoticeList(int optionVal,String question, int start, int number, long from, long to, int orderBy){
         if(optionVal > 4 || optionVal < 1){
             optionVal = 1;
+        }
+        if(orderBy > 4 || orderBy < 0){
+            orderBy = 1;
         }
         
         var arr = new ArrayList<Notice>();
@@ -69,8 +73,21 @@ public class NoticeBoardDAO {
         try{
             Connection();
             var query = new StringBuilder();
-            query.append("select * from ");
-            query.append(tableName);
+            
+            // 정렬 방법 : 4 
+            if(orderBy == 4){
+                query.append("select sid, user_sid, username, gen_time,title,main_text,views,coalesce(b.cnt,0) as count from ");
+                query.append(tableName);
+                query.append(" left join ");
+                query.append("(select notice_board_sid,count(notice_board_sid) as cnt from ");
+                query.append(likeTableName);
+                query.append(" group by notice_board_sid) b on sid = notice_board_sid");
+            }else{
+                // 정렬 방법 : 1,2,3
+                query.append("select * from ");
+                query.append(tableName);
+            }
+
             if(optionVal == 1){
                 query.append(" where (title like '%'||?||'%' or main_text like '%'||?||'%')");
             }else if(optionVal == 2){
@@ -82,7 +99,25 @@ public class NoticeBoardDAO {
             }
             // 게시글 범위
             query.append(" and (gen_time > ? and gen_time < ?)");
-            query.append(" order by gen_time desc ");
+            
+            if(orderBy == 0){
+                // 0. 조회수 정렬
+                query.append(" order by views desc, gen_time desc ");
+            }else if(orderBy == 1){
+                // 1. 생성일 순
+                query.append(" order by gen_time desc ");
+            }else if(orderBy == 2){
+                // 2. 제목 순
+                query.append(" order by title,gen_time desc ");
+            }else if(orderBy == 3){
+                // 3. 작성자 순
+                query.append(" order by username, gen_time desc ");
+            }else if(orderBy == 4){
+                // 4. 좋아요 순
+                query.append(" order by count desc, gen_time desc ");
+            }
+
+            
             // 0번째 부터 5개의 자료만 출력해라.
             query.append("OFFSET ? ROWS FETCH NEXT ? ROWS ONLY");
 

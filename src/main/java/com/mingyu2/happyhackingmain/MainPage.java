@@ -148,7 +148,7 @@ public class MainPage extends HttpServlet{
             // 메뉴
             var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
             menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","",""), false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
 
@@ -184,7 +184,7 @@ public class MainPage extends HttpServlet{
                 optionVal = 1;
             }
 
-            // 검색 날짜 범위
+            // *** 검색 날짜 범위 ***
             var dateFrom = request.getParameter("date_from");
             var dateTo = request.getParameter("date_to");
             if(dateFrom == null || dateTo == null){
@@ -216,7 +216,27 @@ public class MainPage extends HttpServlet{
             }
             System.out.println(dateFrom+" ~ "+dateTo);
             System.out.println("검색 날짜 : "+from + " ~ "+to + " "+System.currentTimeMillis());
+            // *** 검색 날짜 범위 END ***
 
+            // *** 게시글 정렬 방법 ****
+            // 0. 조회수 정렬
+            // 1. 날짜순
+            // 2. 제목 순
+            // 3. 작성자 순
+            // 4. 좋아요 순
+            var orderBy = 1;
+            try{
+                orderBy = Integer.parseInt(request.getParameter("order_by"));
+            }catch(Exception e){
+                e.printStackTrace();
+                orderBy = 1;
+            }
+            if(orderBy < 0 || orderBy > 4){
+                orderBy = 1;
+            }
+            request.setAttribute("orderBy", orderBy);
+            System.out.println("정렬 방법 : "+orderBy);
+            // *** 게시글 정렬 방법 END ****
  
             // 현재 페이지
             var p = request.getParameter("page");
@@ -236,8 +256,8 @@ public class MainPage extends HttpServlet{
             var q = request.getParameter("q"); // null or "" 면 모든 데이터 다 보여주기
             System.out.println(q);
 
-            var noticeBoardDAO = new NoticeBoardDAO(getServletContext());
 
+            var noticeBoardDAO = new NoticeBoardDAO(getServletContext());
             // 모든 데이터 다 가져오기.
             if(q == null){
                 q="";
@@ -267,7 +287,7 @@ public class MainPage extends HttpServlet{
             // 최대 페이지 수를 초과하면 가장 마지막 페이지로 이동한다.
             if(page > lastPage){
                 // response.sendRedirect(noticeBoard+"?page="+lastPage+"&q="+q);
-                response.sendRedirect(noticeBoard+baseNoticeBoardParameter(1,lastPage,q,"",""));
+                response.sendRedirect(noticeBoard+baseNoticeBoardParameter(1,lastPage,q,"","",orderBy));
                 return true;
             }
             // 데이터 시작 위치
@@ -275,7 +295,7 @@ public class MainPage extends HttpServlet{
             
 
             // 검색 데이터 가져오기.
-            var array = noticeBoardDAO.getNoticeList(optionVal,q,start,number, from, to);
+            var array = noticeBoardDAO.getNoticeList(optionVal,q,start,number, from, to, orderBy);
 
 
             //***** 페이징 정보 *****
@@ -462,7 +482,7 @@ public class MainPage extends HttpServlet{
             // ***** 파일 업로드 end *****
 
             // result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+"?page=1&q='</script>";
-            result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1,1,"","","")+"'</script>";
+            result = "<script>alert('success "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1,1,"","","",1)+"'</script>";
             simplePage(response, result);
             return true;
         }
@@ -680,7 +700,7 @@ public class MainPage extends HttpServlet{
                     noticeRe = "file upload fail";
                 }
                 // 성공
-                result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1, 1, "","","")+"'</script>";
+                result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1, 1, "","","",1)+"'</script>";
                 simplePage(response, result);
                 return true;
             }catch(Exception e){
@@ -937,9 +957,9 @@ public class MainPage extends HttpServlet{
         }
         return false;
     }
-    private String baseNoticeBoardParameter(int optionVal,int page,String q, String dateFrom, String dateTo){
+    private String baseNoticeBoardParameter(int optionVal,int page,String q, String dateFrom, String dateTo, int orderBy){
         // TODO 수정
-        return "?option_val="+optionVal+"&page="+page+"&q="+q+"&date_from="+dateFrom+"&date_to="+dateTo;
+        return "?option_val="+optionVal+"&page="+page+"&q="+q+"&date_from="+dateFrom+"&date_to="+dateTo+"&order_by="+orderBy;
     }
     private String getFilePath(ServletRequest request,String folderName){
         // var path = new File(request.getServletContext().getRealPath("")).getParent() + File.separatorChar+folderName;
