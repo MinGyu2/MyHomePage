@@ -20,6 +20,8 @@ import com.mingyu2.happyhackingmain.problems.problemsqlinjection.LoginAuthMethod
 import com.mingyu2.login.SessionName.UserName;
 import com.mingyu2.login.authentication.LoginAuthentication;
 import com.mingyu2.login.authentication.database.User;
+import com.mingyu2.login.authentication.database.UsersDAO;
+import com.mingyu2.login.authentication.searchaddress.AddressDAO;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
@@ -138,8 +140,14 @@ public class MainPage extends HttpServlet{
 
         var noticeBoardFileDownload = "/main_page/notice_board/notice_file_download";
         var noticeBoardFileDelete = "/main_page/notice_board/notice_file_delete";
-
         var noticeBoardLikes = "/main_page/notice_board/likes";
+
+        // 마이페이지
+        var myPage = "/main_page/my_page";
+        var myPageChangeInfo = "/main_page/my_page/change_info";
+        var findAddress = "/main_page/my_page/find_address_number";
+        var changeUserInfo = "/main_page/my_page/change_user_info";
+        var changePWD = "/main_page/my_page/change_user_pwd";
         
         if(uri.matches("/main_page[/]?")){
             // 메인페이지를 보여준다.
@@ -156,6 +164,95 @@ public class MainPage extends HttpServlet{
             request.setAttribute("menus", menus);
 
             return mainPage(request, response, 1);
+        }
+
+        // 마이페이지
+        if(uri.equals(myPage)){
+            // 메뉴들
+            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            request.setAttribute("menus", menus);
+            
+            return mainPage(request, response, 0);
+        }
+
+        // 마이페이지 사용자 정보 변경 페이지
+        if(uri.equals(myPageChangeInfo)){
+            // 메뉴들
+            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            request.setAttribute("menus", menus);
+
+            request.setAttribute("signUpFindAddressNum", findAddress);
+            
+            return mainPage(request, response, 3);
+        }
+
+        // 우편번호 찾기
+        if(uri.equals(findAddress)){
+            var address = request.getParameter("address");
+            
+            // 주소를 이용하여 우편 번호 찾기 시작!
+            var addressDAO = new AddressDAO(getServletContext());
+            var result = addressDAO.getAddressNumber(address);
+            
+            // 끝
+
+            var sb = new StringBuilder();
+            sb.append(result);
+            var out = new BufferedWriter(new OutputStreamWriter(response.getOutputStream()));
+            out.write(sb.toString());
+            out.flush();
+            out.close();
+            return true;
+        }
+
+        // 사용자 정보 변경 요청을 처리
+        if(request.getMethod().equals("POST") && uri.equals(changeUserInfo)){
+            var email = request.getParameter("email");
+            var addressNumber = request.getParameter("address-number");
+            var address = request.getParameter("address");
+            var addressSub = request.getParameter("address-sub");
+
+            var user = (User)request.getAttribute("user");
+            var isOK = new UsersDAO(getServletContext()).updateUserInfo(user.getSid(), email, addressNumber, address, addressSub);
+
+            System.out.println("요청옴 "+email+"  "+addressNumber+"  "+address+"  "+addressSub+"  "+ user.getSid());
+
+            var result = "";
+            if(isOK){
+                result = "<script>alert('change success!');location.href='"+myPage+"'</script>";
+            }else{
+                result = "<script>alert('change fail!');location.href='"+myPage+"'</script>";
+            }
+            simplePage(response, result);
+            return true;
+        }
+
+        // 비밀번호 변경 요청을 처리
+        if(request.getMethod().equals("POST") && uri.equals(changePWD)){
+            var result = "";
+            var pwd = request.getParameter("pwd");
+            var newPwd = request.getParameter("new-pwd");
+            var user = (User)request.getAttribute("user");
+
+            var isOK = new UsersDAO(getServletContext()).updatePWD(user, pwd, newPwd);
+
+            
+            System.out.println("비번 변경 요청 : "+pwd+"   "+newPwd);
+            if(isOK){
+                result = "<script>alert('password change success!');location.href='/user-logout'</script>";
+            }else{
+                result = "<script>alert('password change fail!');location.href='/user-logout'</script>";
+            }
+            simplePage(response, result);
+            return true;
         }
 
         // 게시판

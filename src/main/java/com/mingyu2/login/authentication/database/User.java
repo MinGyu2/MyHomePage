@@ -10,7 +10,11 @@ public class User {
     private long modifiTime; // 수정 시각
     private String algorithm;
     private boolean authority = false;
-    public User(long sid, String username, String email, String salt, String password, long getTime, long modifiTime, String algorithm, boolean authority){
+
+    private String addressNumber;
+    private String address;
+    private String addressSub;
+    public User(long sid, String username, String email, String salt, String password, long getTime, long modifiTime, String algorithm, boolean authority, String addressNumber, String address, String addressSub){
         this.sid = sid;
         this.username = username;
         this.email = email;
@@ -20,6 +24,10 @@ public class User {
         this.modifiTime = modifiTime;
         this.algorithm = algorithm;
         this.authority = authority;
+
+        this.addressNumber = addressNumber;
+        this.address = address;
+        this.addressSub = addressSub;
     }
     public long getSid() {
         return sid;
@@ -48,6 +56,16 @@ public class User {
     public boolean getAuthority() {
         return authority;
     }
+
+    public String getAddressNumber(){
+        return addressNumber;
+    }
+    public String getAddress() {
+        return address;
+    }
+    public String getAddressSub() {
+        return addressSub;
+    }
     
     @Override
     public String toString() {
@@ -61,7 +79,7 @@ public class User {
     }
     // xss 방지
     // 안되네
-    private String filter(String in){
+    public String filter(String in){
         // 순서데로 해야한다.
         // & &amp;  이게 무조건 첫번째로 와야한다.
         // < &lt;
