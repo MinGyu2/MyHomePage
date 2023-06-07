@@ -10,6 +10,7 @@ import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.TimeZone;
+import java.util.regex.Pattern;
 
 import com.mingyu2.database.DBConnection;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeBoardDAO;
@@ -448,6 +449,10 @@ public class MainPage extends HttpServlet{
                     if(part.getSubmittedFileName().equals("")){
                         continue;
                     }
+                    // 파일 이름에 금지된 문자가 사용되면 파일 업로드 안하기.
+                    if(notCorrectFileName(part.getSubmittedFileName())){
+                        continue;
+                    }
                     var file = new File(uploadPath);
                     if(!file.exists()){
                         // 폴더 생성
@@ -669,6 +674,11 @@ public class MainPage extends HttpServlet{
                         if(part.getSubmittedFileName().equals("")){
                             continue;
                         }
+                        // 파일 이름에 금지된 문자가 사용되면 파일 업로드 안하기.
+                        if(notCorrectFileName(part.getSubmittedFileName())){
+                            continue;
+                        }
+
                         if(!newFolder.exists()){
                             // 폴더 생성
                             newFolder.mkdir();
@@ -956,6 +966,13 @@ public class MainPage extends HttpServlet{
             return (new LoginAuthMethods(sqlProbURI, context, request, response)).connectPage();
         }
         return false;
+    }
+    // true : dont save file in server
+    // false : save file in server
+    private boolean notCorrectFileName(String fileNmae){
+        var regex = "[/\\\\:*?<>|\"%]+";
+        var pattern = Pattern.compile(regex);
+        return pattern.matcher(fileNmae).find();
     }
     private String baseNoticeBoardParameter(int optionVal,int page,String q, String dateFrom, String dateTo, int orderBy){
         // TODO 수정
