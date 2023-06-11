@@ -1,10 +1,7 @@
 package com.mingyu2.happyhackingmain;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
@@ -14,6 +11,7 @@ import java.util.regex.Pattern;
 
 import com.mingyu2.database.DBConnection;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeBoardDAO;
+import com.mingyu2.happyhackingmain.noticeboard.NoticeFileDAO;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeLikeDAO;
 import com.mingyu2.happyhackingmain.problems.problemauthentication.Problem1;
 import com.mingyu2.happyhackingmain.problems.problemsqlinjection.LoginAuthMethods;
@@ -24,7 +22,6 @@ import com.mingyu2.login.authentication.database.UsersDAO;
 import com.mingyu2.login.authentication.searchaddress.AddressDAO;
 
 import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServlet;
@@ -494,7 +491,7 @@ public class MainPage extends HttpServlet{
             gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_write.jsp");
             return true;
         }
-        // 글 저장
+        // 새로운 글 저장
         if(request.getMethod().equals("POST") && uri.equals(noticeBoardSave)){
             var charSet = "utf-8";
             request.setCharacterEncoding(charSet);
@@ -531,14 +528,9 @@ public class MainPage extends HttpServlet{
             // ***** 파일 업로드 시작 *****
             var noticeRe = "no file";
             try{
-                // 폴더 생성 또는 존재 확인
-                //  
-
-                // 저장을 위한 폴더
-                var folderName = genTime+"_"+ noticeSid;
-                var uploadPath = getFilePath(request, folderName);
-                // genTime + _ + noticeSID => 폴더명
+                // 올바른 파일인지 확인하고 db에 저장한다.
                 var parts = request.getParts();
+                var fileSidList = new ArrayList<Long>();
                 for(var part:parts){
                     if(!part.getHeader("Content-Disposition").contains("filename=")){
                         continue;
@@ -550,32 +542,29 @@ public class MainPage extends HttpServlet{
                     if(notCorrectFileName(part.getSubmittedFileName())){
                         continue;
                     }
-                    var file = new File(uploadPath);
-                    if(!file.exists()){
-                        // 폴더 생성
-                        file.mkdir();
-                        System.out.println(noticeSid+"게시글 폴더 생성 함");
-                    }
 
-                    var count = file.listFiles().length;
-                    if(count > MAX_FILE_NUM){
-                        System.out.println("최대 파일 갯수 초과");
+                    if(fileSidList.size() > MAX_FILE_NUM){
+                        noticeRe = "file max number";
                         break;
                     }
 
-                    System.out.println("퐅더 존재? => "+file.isDirectory());
-
-                    System.out.println("타입 : "+part.getHeader("Content-Disposition"));
-                    System.out.println("크기 : "+part.getSize());
-                    System.out.println("이름 : "+part.getSubmittedFileName());
-
-                    part.write(uploadPath+File.separator+part.getSubmittedFileName());
+                    // 데이터 DB 테이블에 저장하기
+                    var re = new NoticeFileDAO(getServletContext()).saveNoticeFile(user.getSid(), noticeSid, part);
                     part.delete(); // 임시파일 삭제
 
-                    System.out.println("업로드 성공");
-                    noticeRe = "file upload success";
-                    System.out.println("경로 : "+uploadPath);
+                    if(re != -1){
+                        System.out.println("업로드 성공");
+                        noticeRe = "file upload success";
+
+                        fileSidList.add(re);
+                    }else{
+                        System.out.println("파일 업로드 실패");
+                        noticeRe = "file upload fail";
+                    }
                 }
+
+                // 게시글 file list 와 저장된 파일 갯수 저장하기.
+                notice.updateFileListAndCnt(fileSidList, noticeSid);
             }catch(Exception e){
                 e.printStackTrace();
                 System.out.println("파일 업로드 실패");
@@ -613,25 +602,16 @@ public class MainPage extends HttpServlet{
                 // 게시글 조회수 증가 end
 
                 // *** 파일들 읽어 오기 ***
-                // href 링크 만들기
-                var folderName = notice.getGenTime()+"_"+noticeSID;
-                var uploadPath = getFilePath(request, folderName);
-                // 파일 다운로드 get 파라미터 이름
+                // 파일 이름 찾기 및 href 링크 만들기
                 var fileNameList = new ArrayList<Pair<String,String>>();
-                try{
-                    var folder = new File(uploadPath); // 폴더
-                    if(folder.exists()){
-                        var files = folder.listFiles(); // 파일들
-                        for(var file : files) {
-                            var fileName = file.getName();
-                            var hrefPrameter = fileName;
-                            fileNameList.add(new Pair<String,String>(fileName,hrefPrameter));
-                            System.out.println(fileNameList);
-                        }
-                    }
-                }catch(Exception e){
-                    e.printStackTrace();
+                var fileSidList = noticeDAO.getFileSidList(noticeSID);
+
+                var noticeFileDAO = new NoticeFileDAO(getServletContext());
+                for(var fileSid:fileSidList){
+                    var fileName = noticeFileDAO.getFileName(fileSid);
+                    fileNameList.add(new Pair<String,String>(fileName,fileSid.toString()));
                 }
+
                 request.setAttribute("fileNameList", fileNameList);
                 request.setAttribute("noticeBoardFileDownload", noticeBoardFileDownload);
                 // *** 파일들 읽어 오기 end ***
@@ -670,33 +650,25 @@ public class MainPage extends HttpServlet{
                 }
 
                 var noticeSID = notice.getSid();
-                var folderName = notice.getGenTime()+"_"+noticeSID;
-                var uploadPath = getFilePath(request, folderName);
-                // 파일 다운로드 get 파라미터 이름
+                // *** 파일들 읽어 오기 ***
+                // 파일 이름 찾기 및 href 링크 만들기
                 var fileNameList = new ArrayList<Pair<String,String>>();
-                try{
-                    var folder = new File(uploadPath); // 폴더
-                    if(folder.exists()){
-                        var files = folder.listFiles(); // 파일들
-                        for(var file : files) {
-                            var fileName = file.getName();
-                            var hrefPrameter = folderName+"%2F"+fileName;
-                            fileNameList.add(new Pair<String,String>(fileName,hrefPrameter));
-                            System.out.println(fileNameList);
-                        }
-                    }
-                }catch(Exception e){
-                    e.printStackTrace();
+                var fileSidList = noticeDAO.getFileSidList(noticeSID);
+
+                var noticeFileDAO = new NoticeFileDAO(getServletContext());
+                for(var fileSid:fileSidList){
+                    var fileName = noticeFileDAO.getFileName(fileSid);
+                    fileNameList.add(new Pair<String,String>(fileName,fileSid.toString()));
                 }
+
                 request.setAttribute("fileNameList", fileNameList);
                 request.setAttribute("noticeBoardFileDownload", noticeBoardFileDownload);
                 request.setAttribute("noticeBoardFileDelete", noticeBoardFileDelete);
                 // *** 파일들 읽어 오기 end ***
 
-                request.setAttribute("modifyMode",true);
 
+                request.setAttribute("modifyMode",true);
                 request.setAttribute("noticeBoardURL", noticeBoardModifySave); // 수정 저장 URL
-                
                 request.setAttribute("noticeID", sid); // 페이지 아이디
                 request.setAttribute("title", notice.getTitle());
                 request.setAttribute("mainText", notice.getMainText());
@@ -732,37 +704,37 @@ public class MainPage extends HttpServlet{
                     return false;
                 }
 
-                // 전 저장위치
+                // 1. 전 저장위치
                 var noticeSID = notice.getSid();
-                var beforeFolderName = notice.getGenTime()+"_"+noticeSID;
-                var beforeUploadPath = getFilePath(request, beforeFolderName);
                 
-                // 글 삭제
-                if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
-                    return false;
-                }
-                
-                // 새로운 글 저장
+                // 2. 새로운 글 저장
                 var genTime = System.currentTimeMillis();
-                var newSid = noticeDAO.saveNotice(user, title, mainText, genTime);
-                if(newSid==0){ // 실패
+                var newNoticeSid = noticeDAO.saveNotice(user, title, mainText, genTime);
+                if(newNoticeSid==0){ // 실패
                     result = "<script>alert('fail');location.href='"+noticeBoard+"'</script>";
                     simplePage(response, result);
                     return true;
                 }
 
-                var noticeRe = "no new file";
-                try {
-                    var folder = new File(beforeUploadPath); // 폴더
+                // 3. 이전 게시글 파일 새로운 글로 이전
+                // notice_board_sid 새로운 글 sid로 바꾸기.
+                var fileSidList = noticeDAO.getFileSidList(noticeSID);
+                noticeDAO.updateFileListAndCnt(fileSidList, newNoticeSid);
 
-                    var newFolderName = genTime+"_"+newSid;
-                    var afterUploadPath = getFilePath(request, newFolderName);
-                    var newFolder = new File(afterUploadPath);
-                    if(folder.exists()){ 
-                        // 폴더 이름만 변경.
-                        folder.renameTo(newFolder);
-                    }
-                    // 
+                var fileDAO = new NoticeFileDAO(getServletContext());
+                for(var fileSid:fileSidList){
+                    fileDAO.changeNoticeSid(fileSid, newNoticeSid);
+                }
+
+                // 4. 이전 글 삭제
+                if(!noticeDAO.deleteNotice(sid)){ // 삭제 실패
+                    return false;
+                }
+                
+                // 5. ***** 파일 업로드 시작 *****
+                var noticeRe = "no new file";
+                try{
+                    // 올바른 파일인지 확인하고 db에 저장한다.
                     var parts = request.getParts();
                     for(var part:parts){
                         if(!part.getHeader("Content-Disposition").contains("filename=")){
@@ -776,36 +748,35 @@ public class MainPage extends HttpServlet{
                             continue;
                         }
 
-                        if(!newFolder.exists()){
-                            // 폴더 생성
-                            newFolder.mkdir();
-                            System.out.println(newSid+"게시글 폴더 생성 함");
-                        }
-                        
-                        var count = newFolder.listFiles().length;
-                        System.out.println("파일 갯수 : "+count);
-                        if(count > MAX_FILE_NUM){
-                            System.out.println("최대 파일 갯수 초과");
-                            noticeRe = "out of file number ( maxcount 3 )";
+                        if(fileSidList.size() > MAX_FILE_NUM){
+                            noticeRe = "file max number";
                             break;
                         }
 
-                        System.out.println("퐅더 존재? => "+newFolder.isDirectory());
+                        // 데이터 DB 테이블에 저장하기
+                        var re = new NoticeFileDAO(getServletContext()).saveNoticeFile(user.getSid(), newNoticeSid, part);
+                        part.delete(); // 임시파일 삭제
 
-                        System.out.println("타입 : "+part.getHeader("Content-Disposition"));
-                        System.out.println("크기 : "+part.getSize());
-                        System.out.println("이름 : "+part.getSubmittedFileName());
-                        part.write(afterUploadPath+File.separator+part.getSubmittedFileName());
-                        part.delete(); // 임시 파일 삭제
+                        if(re != -1){
+                            System.out.println("업로드 성공");
+                            noticeRe = "file upload success";
 
-                        System.out.println("파일 저장 성공");
-                        noticeRe = "file upload success";
-                        System.out.println("경로 : "+afterUploadPath);
+                            fileSidList.add(re);
+                        }else{
+                            System.out.println("파일 업로드 실패");
+                            noticeRe = "new file upload fail";
+                        }
                     }
-                } catch (Exception e) {
+
+                    // 게시글 file list 와 저장된 파일 갯수 저장하기.
+                    noticeDAO.updateFileListAndCnt(fileSidList, newNoticeSid);
+                }catch(Exception e){
                     e.printStackTrace();
-                    noticeRe = "file upload fail";
+                    System.out.println("파일 업로드 실패");
+                    noticeRe = "new file upload fail";
                 }
+                // ***** 파일 업로드 end *****
+                
                 // 성공
                 result = "<script>alert('success : "+noticeRe+"');location.href='"+noticeBoard+baseNoticeBoardParameter(1, 1, "","","",1)+"'</script>";
                 simplePage(response, result);
@@ -845,21 +816,6 @@ public class MainPage extends HttpServlet{
                 }
                 System.out.println("**** 게시글 삭제 끝 ****");
 
-                // *** 파일 업로드 폴더 삭제 ***
-                var folderName = notice.getGenTime()+"_"+notice.getSid();
-                var uploadPath = getFilePath(request, folderName);
-                var folder = new File(uploadPath);
-                if(folder.exists()){
-                    var files = folder.listFiles();
-                    // 모든 파일 삭제
-                    for(var file : files){
-                        file.delete();
-                    }
-                    // 마지막으로 폴더 삭제
-                    folder.delete();
-                }
-                // *** 파일 업로드 폴더 삭제 end ***
-
                 result = "<script>alert('success');location.href='"+noticeBoard+"'</script>";
                 simplePage(response, result);
                 return true;
@@ -870,43 +826,42 @@ public class MainPage extends HttpServlet{
 
         // 게시글 파일 다운로드
         if(uri.equals(noticeBoardFileDownload)){
-            var result = "";
-            System.out.println("**** 게시글 다운 시작 ****");
-            var sid = Long.parseLong(request.getParameter("pageid"));
+            long pageSid;
+            long fileSid;
+            try {
+                pageSid = Long.parseLong(request.getParameter("pageid"));
+                fileSid = Long.parseLong(request.getParameter("downlink"));
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+
             var noticeDAO = new NoticeBoardDAO(getServletContext());
-            var notice = noticeDAO.getNotice(sid);
-
+            var notice = noticeDAO.getNotice(pageSid);
             if(notice == null) {
-                result = "<script>alert('do not exist.');location.href='"+noticeBoard+"'</script>";
-                simplePage(response, result);
-                return true;
+                return false;
             }
-            var fileFolder = notice.getGenTime()+"_"+notice.getSid();
+
+            var fileDAO = new NoticeFileDAO(getServletContext());
+            var is = fileDAO.getFile(fileSid);
+            if(is == null){
+                return false;
+            }
+            var fileSize = is.available();
+            var fileName = fileDAO.getFileName(fileSid);
             
-            var downlink = fileFolder+File.separatorChar+request.getParameter("downlink");
-            var filePath = new String(getFilePath(request, downlink).getBytes("UTF-8")); // utf-8로 바꿔준다.
-
-            var file = new File(filePath);
-            if(!file.exists()){
-                return false;
-            }
-            if(!file.isFile()){
-                return false;
-            }
-
-            var filesize = file.length();
-
-            var sMimeType = getServletContext().getMimeType(filePath); // 확장자에 따라 달라진다.
+            // 사용자에게 다운로드 보내기
+            var sMimeType = getServletContext().getMimeType(fileName);
             if(sMimeType == null || sMimeType.length() == 0){
                 sMimeType = "application/octet-stream";
             }
-            BufferedInputStream fin = null;
+
             BufferedOutputStream outs = null;
             try {
-                var fileName= downlink.split("/")[1];
-                byte[] b = new byte[8192];
-
                 response.setContentType(sMimeType+"; charset=utf-8");
+                if(fileSize > 0){
+                    response.setContentLength(fileSize);
+                }
 
                 var userAgent = request.getHeader("User-Agent");
                 System.out.println(userAgent);
@@ -918,29 +873,32 @@ public class MainPage extends HttpServlet{
                     response.setHeader("Content-Disposition", "attachment; filename="+ new String(fileName.getBytes("utf-8"), "latin1") + ";");
                 }
 
-                // 파일 사이즈 정확히 알아야함
-                if(filesize > 0){
-                    response.setHeader("Content-Length", ""+filesize);
-                }
-                
-                fin = new BufferedInputStream(new FileInputStream(file));
+                // 사용자에게 파일을 전송한다.
                 outs = new BufferedOutputStream(response.getOutputStream());
-                int read = 0;
-                while((read= fin.read(b)) != -1){
+                int read = -1;
+                byte[] b = new byte[8192];
+                while((read = is.read(b)) != -1){
                     outs.write(b, 0, read);
                 }
-
+                
             } catch (Exception e) {
                 e.printStackTrace();
-                return false;
             } finally {
-                try{
-                    fin.close();
-                }catch(Exception e){}
-                try{
+                try {
+                    is.close();
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
+                try {
                     outs.close();
-                }catch(Exception e){}
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
+                // 다운로드 완료 된후 DB 연결을 해제해야한다.
+                fileDAO.Close();
             }
+
+            System.out.println("사용자 파일 다운로드 "+ pageSid + "  "+ fileSize);
             return true;
         }
 
@@ -949,19 +907,19 @@ public class MainPage extends HttpServlet{
         if(request.getMethod().equals("GET") && uri.equals(noticeBoardFileDelete)){
             var re = "fail";
             try{
-                var noticeID = request.getParameter("noticeID");
-                var filename = request.getParameter("filename");
+                var noticeSid = Long.parseLong(request.getParameter("noticeID"));
+                var fileSid = Long.parseLong(request.getParameter("filename"));
 
-                var sid = Long.parseLong(noticeID);
                 var noticeDAO = new NoticeBoardDAO(getServletContext());
-                var notice = noticeDAO.getNotice(sid);
+                var notice = noticeDAO.getNotice(noticeSid);
 
+                // 게시글 존재하는지 확인하기
                 if(notice == null) {
                     System.out.println("존재하지 않는 게시글");
                     simplePage(response, "{\"result\":\"fail\"}");
                     return true;
                 }
-
+                // 글 작성자와 현재 유저가 일지하는지 확인
                 var user = (User)request.getAttribute("user");
                 if(user.getSid() != notice.getUserSID()){ // 글 작성자와 현재 유저와 일치안함 실패
                     System.out.println("글 작성자와 현재유저 일치 안함");
@@ -969,25 +927,26 @@ public class MainPage extends HttpServlet{
                     return true;
                 }
 
-                // 파일 존재 여부 확인
-                var folderName = notice.getGenTime()+"_"+notice.getSid();
-                var filePath = getFilePath(request, folderName+File.separatorChar+filename);
-                var file = new File(filePath);
-                if(!file.exists()){
-                    System.out.println("파일 존재 안함!");
-                    simplePage(response, "{\"result\":\"fail\"}");
-                    return true;
-                }
-                if(!file.isFile()){
-                    System.out.println("파일이 아님!");
+                // 업로드 파일 사용자 확인
+                var fileDAO = new NoticeFileDAO(getServletContext());
+                if(user.getSid() != fileDAO.getUploadUser(fileSid)){
+                    System.out.println("글 작성자와 파일 업로드 사용자 명과 일치 안함");
                     simplePage(response, "{\"result\":\"fail\"}");
                     return true;
                 }
 
-                // 파일 삭제 하기.
-                if(file.delete()){
-                    re = "success";
+                // 파일 삭제
+                if(!fileDAO.deleteFile(fileSid)){
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
                 }
+                // 파일 삭제 end
+                re = "success";
+
+                var fileSidList = noticeDAO.getFileSidList(noticeSid);
+                fileSidList.remove(fileSid);
+                noticeDAO.updateFileListAndCnt(fileSidList, noticeSid);
+                System.out.println("삭제 완료!");
             }catch(Exception e){
                 e.printStackTrace();
                 re = "fail";
@@ -1074,19 +1033,6 @@ public class MainPage extends HttpServlet{
     private String baseNoticeBoardParameter(int optionVal,int page,String q, String dateFrom, String dateTo, int orderBy){
         // TODO 수정
         return "?option_val="+optionVal+"&page="+page+"&q="+q+"&date_from="+dateFrom+"&date_to="+dateTo+"&order_by="+orderBy;
-    }
-    private String getFilePath(ServletRequest request,String folderName){
-        // var path = new File(request.getServletContext().getRealPath("")).getParent() + File.separatorChar+folderName;
-        
-        // 업로드 폴더 존재 확인 업로드 폴더 존재안하면 만들어주기. 
-        // 링크를 통해 접근할 수 없는 위치에 만들어주기.
-        var path = new File(request.getServletContext().getRealPath("")).getParentFile().getParent()+File.separatorChar+"upload_folder";
-        var folder = new File(path);
-        if(!folder.exists() || !folder.isDirectory()){
-            folder.mkdir(); // 업로드 폴더 만들기.
-        }
-        path = path + File.separatorChar + folderName;
-        return path;
     }
     private void simplePage(ServletResponse response, String result) throws IOException{
         var sb = new StringBuilder();

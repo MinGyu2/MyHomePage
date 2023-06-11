@@ -2,6 +2,8 @@ package com.mingyu2.happyhackingmain.noticeboard;
 
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import com.mingyu2.database.DBConnection;
 import com.mingyu2.login.authentication.database.User;
@@ -213,6 +215,9 @@ public class NoticeBoardDAO {
         // 좋아요 테이블에서 게시글과 관련된 좋아요 기록 모두 삭제
         new NoticeLikeDAO(context).deleteNoticeLike(sid);
 
+        // 업로드 파일 부터 삭제한다.
+        new NoticeFileDAO(context).deleteNoticeFile(sid);
+
         var re = false;
         // delete from notice_board where sid=13;
         var query = new StringBuilder();
@@ -305,6 +310,68 @@ public class NoticeBoardDAO {
             Close();
         }
         return sid;
+    }
+
+    // file list 저장 및 저장된 파일 수 저장
+    public boolean updateFileListAndCnt(ArrayList<Long> fileSidList, long noticeSid){
+        var re = false;
+        var query = new StringBuilder();
+        query.append("update ");
+        query.append(tableName);
+        query.append(" set file_cnt=?,file_sids=? where sid=?");
+
+        try {
+            Connection();
+            var pstmt = conn.prepareStatement(query.toString());
+            pstmt.setLong(1,fileSidList.size());
+            pstmt.setString(2, fileSidList.toString());
+            pstmt.setLong(3, noticeSid);
+            pstmt.executeUpdate();
+            re = true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            re = false;
+        } finally { 
+            Close();
+        }
+
+        return re;
+    }
+
+
+    // get file sid list
+    public ArrayList<Long> getFileSidList(long noticeSid){
+        ArrayList<Long> fileSidList = null;
+        var query = new StringBuilder();
+        query.append("select file_sids from ");
+        query.append(tableName);
+        query.append(" where sid=?");
+        try {
+            Connection();
+            var pstmt = conn.prepareStatement(query.toString());
+            pstmt.setLong(1, noticeSid);
+            var re = pstmt.executeQuery();
+
+            String listStr = "[]";
+            if(re.next()){
+                listStr = re.getString(1);
+            }
+            fileSidList = strToArrayList(listStr);
+        } catch (Exception e) {
+            e.printStackTrace();
+            fileSidList = new ArrayList<Long>();
+        } finally {
+            Close();
+        }
+        return fileSidList;
+    }
+
+    private ArrayList<Long> strToArrayList(String listStr){
+        var arr = new ArrayList<Long>();
+        if(listStr.length() > 2){
+            arr.addAll(Arrays.stream(listStr.substring(1,listStr.length()-1).split(", ")).map(Long::parseLong).collect(Collectors.toList()));
+        }
+        return arr;
     }
 
     private long genSid(){
