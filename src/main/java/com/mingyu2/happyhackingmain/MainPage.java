@@ -10,6 +10,8 @@ import java.util.TimeZone;
 import java.util.regex.Pattern;
 
 import com.mingyu2.database.DBConnection;
+import com.mingyu2.happyhackingmain.noMemberNoticeBoard.NoMemberNoticeBoardDAO;
+import com.mingyu2.happyhackingmain.noMemberNoticeBoard.NoMemberNoticeBoardFileDAO;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeBoardDAO;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeFileDAO;
 import com.mingyu2.happyhackingmain.noticeboard.NoticeLikeDAO;
@@ -50,10 +52,11 @@ public class MainPage extends HttpServlet{
     @Override
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var uri = request.getRequestURI();
-        if(uri.equals("/")){
-            response.sendRedirect("/main_page");
+
+        if(noMemberSearch(request,response)){
             return;
         }
+
         var pattern = "/main_page[/_a-zA-Z0-9]*";
         if(!uri.matches(pattern)){ // 404 페이지 보여줌
             super.doGet(request, response);
@@ -87,6 +90,11 @@ public class MainPage extends HttpServlet{
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var uri = request.getRequestURI();
+
+        if(noMemberSearch(request,response)){
+            return;
+        }
+
         if(uri.equals("/")){
             response.sendRedirect("/main_page");
             return;
@@ -120,6 +128,557 @@ public class MainPage extends HttpServlet{
         // 패턴에 일치 안 하면 무조건 404 페이지 보여준다.
         super.doPost(request, response);
     }
+    private boolean noMemberSearch(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException{
+        var uri = request.getRequestURI();
+
+        var noMemberNoticeBoard = "/no_member_notice_board";
+        var noMemberNoticeWrite = "/no_member_notice_board/write";
+        var noMemberNoticeSave = "/no_member_notice_board/save";
+        var noMemberNoitceDetail = "/no_member_notice_board/notice_detail";
+        var noMemberNoitceDelete = "/no_member_notice_board/delete";
+        var noMemberNoitceModify = "/no_member_notice_board/modify";
+        var noMemberNoitceModifySave = "/no_member_notice_board/modify_save";
+        var noMemberNoticeFileDownload = "/no_member_notice_board/file_download";
+        var noticeBoardFileDelete = "/no_member_notice_board/file_delete";
+
+        if(uri.equals("/")){
+            request.setAttribute("signInPage", "sign_in_page");
+            request.setAttribute("noMemberNoticeBoard", noMemberNoticeBoard+"?page=1");
+            gotoForwardPage(request, response, "/WEB-INF/no_login/first_page.jsp"); 
+            return true;
+        }
+
+        // 비회원 문의 게시판 목록
+        if(uri.equals(noMemberNoticeBoard)){
+            var p = request.getParameter("page");
+            var page = 1;
+            try{
+                page = Integer.parseInt(p);
+                if(page < 1){
+                    page = 1;
+                }
+            }catch(Exception e){
+                e.printStackTrace();
+                page = 1;
+            }
+
+            var noMemNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+            int cnt = noMemNoticeBoardDAO.getCount();
+            if(cnt == 0){
+                cnt = 1;
+            }
+
+            // ****** 클라이언트가 수정 가능 *******
+            // 한 페이지 보여줄 데이터 갯수 정하기
+            int number = 5;
+            // ****** 클라이언트가 수정 가능 *******
+
+            // 마지막 페이지
+            int lastPage = (cnt/number)+((cnt%number == 0)?0:1);
+            // 최대 페이지 수를 초과하면 가장 마지막 페이지로 이동한다.
+            if(page > lastPage){
+                response.sendRedirect(noMemberNoticeWrite+"?page="+lastPage);
+                return true;
+            }
+
+            // 데이터 시작 위치
+            int start = (page-1)*number;
+
+            // 검색 데이터 가져오기.
+            var array = noMemNoticeBoardDAO.getNoticeList(start, number);
+            
+            //***** 페이징 정보 *****
+            var pagination=new ArrayList<Integer>();
+
+            // ****** 클라이언트가 수정 가능 *******
+            var paginationBase = 5; // 기본이되는 페이징 홀수
+            // ****** 클라이언트가 수정 가능 *******
+
+            pagination.add(page);
+
+            // 페이징을 배열에 저장한다.
+            var leftEnd = false;
+            var rightEnd = false;
+            for(int i = 0, left=page, right=page;i<paginationBase-1;){
+                // left
+                if(left > 1){
+                    left -=1;
+                    pagination.add(0, left);
+                    i++;
+                }else {
+                    leftEnd=true;
+                }
+                // right
+                if(right < lastPage){
+                    right+=1;
+                    pagination.add(right);
+                    i++;
+                }else {
+                    rightEnd=true;
+                }
+
+                if(leftEnd && rightEnd){
+                    break;
+                }
+            }
+            // 첫번째 페이지와 마지막 페이지를 포함해야 하는지 검사한다. 포함해야 하면 포함시킨다.
+            // 0 은 생략을 의미한다.
+            // prev 1 ... 3 4 5 6 next
+            var f = pagination.get(0);
+            if(f != 1){
+                if(f != 2){
+                    pagination.add(0,0);
+                }
+                pagination.add(0,1);
+            }
+
+            var l = pagination.get(pagination.size()-1);
+            if(l != lastPage){
+                if(l != lastPage-1){
+                    pagination.add(0);
+                }
+                pagination.add(lastPage);
+            }
+
+            //***** 페이징 정보 end *****
+
+            //***** 정보 넘겨주기 *****
+            request.setAttribute("noticeBoard", array);
+
+            // 페이징 번호 리스트
+            request.setAttribute("pagination", pagination);
+
+            // 현재 페이지 정보 page
+            request.setAttribute("currentPage", page);
+            // 마지막 Page
+            request.setAttribute("lastPage", lastPage);
+
+            request.setAttribute("noMemberNoitceDetail", noMemberNoitceDetail);
+
+            request.setAttribute("noMemberNoticeWrite",noMemberNoticeWrite);
+            request.setAttribute("noMemberNoticeBoard",noMemberNoticeBoard);
+            gotoForwardPage(request, response, "/WEB-INF/no_login/notice_board/notice_board.jsp");
+            return true;
+        }
+        // 비회원 문의 게시판 목록 end
+
+        
+        // 비회원 문의 게시판 글 쓰기
+        if(uri.equals(noMemberNoticeWrite)){
+            request.setAttribute("hasPassword",true); // 비회원 글쓰기
+            request.setAttribute("noticeBoardURL", noMemberNoticeSave);
+            gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_write.jsp");
+            return true;
+        }
+        // 비회원 문의 게시판 글 쓰기 end
+        
+        // 비회원 문의 게시글 저장
+        if(request.getMethod().equals("POST") && uri.equals(noMemberNoticeSave)){
+            var charSet = "utf-8";
+            request.setCharacterEncoding(charSet);
+            if(!request.getContentType().toLowerCase().startsWith("multipart/form-data")){
+                //404 에러 발생 
+                // application/x-www-form-urlencoded 타입이 아니라.
+                // 오직 multipart/form-data 타입만 받는다.
+                return false;
+            }
+
+            var title = request.getParameter("title");
+            var mainText = request.getParameter("main-text");
+            var password = request.getParameter("password");
+            // 실패
+            if(title.equals("")) {
+                simplePage(response, "<script>alert('title blink!');window.history.back();</script>");
+                return true;
+            }
+            if(mainText.equals("")){
+                simplePage(response, "<script>alert('main text blink!');window.history.back();</script>");
+                return true;
+            }
+            if(password.equals("")){
+                simplePage(response, "<script>alert('password blink!');window.history.back();</script>");
+                return true;
+            }
+
+            var noMemberNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+            var noticeSid = noMemberNoticeBoardDAO.addNotice(title,mainText,password);
+            if(noticeSid == -1){
+                simplePage(response, "<script>alert('save fail!');window.history.back();</script>");
+                return true;
+            }
+
+            // 게시글 저장 성공
+
+            // ***** 파일 업로드 시작 *****
+            var noticeRe = "no file";
+            try{
+                // 올바른 파일인지 확인하고 db에 저장한다.
+                var parts = request.getParts();
+                var fileSidList = new ArrayList<Long>();
+                for(var part:parts){
+                    if(!part.getHeader("Content-Disposition").contains("filename=")){
+                        continue;
+                    }
+                    if(part.getSubmittedFileName().equals("")){
+                        continue;
+                    }
+                    // 파일 이름에 금지된 문자가 사용되면 파일 업로드 안하기.
+                    if(notCorrectFileName(part.getSubmittedFileName())){
+                        continue;
+                    }
+
+                    if(fileSidList.size() > MAX_FILE_NUM){
+                        noticeRe = "file max number";
+                        break;
+                    }
+
+                    // 데이터 DB 테이블에 저장하기
+                    var re = new NoMemberNoticeBoardFileDAO(getServletContext()).saveNoticeFile(noticeSid, part);
+                    part.delete(); // 임시파일 삭제
+
+                    if(re != -1){
+                        System.out.println("업로드 성공");
+                        noticeRe = "file upload success";
+                        fileSidList.add(re);
+                    }else{
+                        System.out.println("파일 업로드 실패");
+                        noticeRe = "file upload fail";
+                    }
+                }
+
+                // 게시글 file list 와 저장된 파일 갯수 저장하기.
+                noMemberNoticeBoardDAO.updateFileListAndCnt(fileSidList, noticeSid);
+            }catch(Exception e){
+                e.printStackTrace();
+                System.out.println("파일 업로드 실패");
+                noticeRe = "file upload fail";
+            }
+            // ***** 파일 업로드 end *****
+
+            simplePage(response, "<script>alert('save success! "+noticeRe+" ');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+            return true;
+        }
+        // 비회원 문의 게시글 저장 end
+
+        // 비회원 비번 입력 문의 글 읽기
+        if(request.getMethod().equals("POST") && uri.equals(noMemberNoitceDetail)){
+            try{
+                var sid = Long.parseLong(request.getParameter("detailsid")); // 문의 게시글 sid
+                var password = request.getParameter("password"); // 문의 게시글 비밀번호
+
+                // 게시글 정보 가지고 오기.
+                var noMemberNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+                var notice = noMemberNoticeBoardDAO.getNoitceBoard(sid, password);
+
+                if(notice == null){
+                    simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                    return true;
+                }
+
+                var noticeSID = notice.getSid();
+
+                // *** 파일들 읽어 오기 ***
+                // 파일 이름 찾기 및 href 링크 만들기
+                var fileNameList = new ArrayList<Pair<String,String>>();
+                var fileSidList = noMemberNoticeBoardDAO.getFileSidList(noticeSID);
+
+                var noticeFileDAO = new NoMemberNoticeBoardFileDAO(getServletContext());
+                for(var fileSid:fileSidList){
+                    var fileName = noticeFileDAO.getFileName(fileSid);
+                    fileNameList.add(new Pair<String,String>(fileName,fileSid.toString()));
+                }
+
+                request.setAttribute("fileNameList", fileNameList);
+                request.setAttribute("noticeBoardFileDownload", noMemberNoticeFileDownload);
+                // *** 파일들 읽어 오기 end ***
+
+                request.setAttribute("notice", notice);
+                request.setAttribute("password",password);
+                request.setAttribute("noMemberNoitceDelete", noMemberNoitceDelete);
+                request.setAttribute("noMemberNoitceModify", noMemberNoitceModify);
+            
+                gotoForwardPage(request, response, "/WEB-INF/no_login/notice_board/notice_detail.jsp");
+            }catch(Exception e){
+                e.printStackTrace();
+                simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+            }
+
+            return true;
+        }
+        // 비회원 비번 입력 문의 글 읽기 end
+
+        // 비회원 글 삭제
+        if(request.getMethod().equals("POST") && uri.equals(noMemberNoitceDelete)){
+            try {
+                var sid = Long.parseLong(request.getParameter("pageid"));
+                var password = request.getParameter("password");
+
+                var noMemberNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+                if(!noMemberNoticeBoardDAO.noticeDelete(sid, password)){
+                    simplePage(response, "<script>alert('delete fail!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                    return true;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                simplePage(response, "<script>alert('delete fail!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                return true;
+            }
+            simplePage(response, "<script>alert('delete success!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+            return true;
+        }
+        // 비회원 글 삭제 end
+
+        // 비회원 글 수정 페이지
+        if(request.getMethod().equals("POST") && uri.equals(noMemberNoitceModify)){
+            try{
+                var sid = Long.parseLong(request.getParameter("pageid")); // 문의 게시글 sid
+                var password = request.getParameter("password"); // 문의 게시글 비밀번호
+    
+                // 게시글 정보 가지고 오기.
+                var noMemberNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+                var notice = noMemberNoticeBoardDAO.getNoitceBoard(sid, password);
+    
+                if(notice == null){
+                    simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                    return true;
+                }
+    
+
+                // *** 파일들 읽어 오기 ***
+                // 파일 이름 찾기 및 href 링크 만들기
+                var noticeSID = notice.getSid();
+                var fileNameList = new ArrayList<Pair<String,String>>();
+                var fileSidList = noMemberNoticeBoardDAO.getFileSidList(noticeSID);
+
+                var noticeFileDAO = new NoMemberNoticeBoardFileDAO(getServletContext());
+                for(var fileSid:fileSidList){
+                    var fileName = noticeFileDAO.getFileName(fileSid);
+                    fileNameList.add(new Pair<String,String>(fileName,fileSid.toString()));
+                }
+
+                request.setAttribute("fileNameList", fileNameList);
+                request.setAttribute("noticeBoardFileDownload", noMemberNoticeFileDownload);
+                request.setAttribute("noticeBoardFileDelete", noticeBoardFileDelete);
+                // *** 파일들 읽어 오기 end ***
+                
+                request.setAttribute("notice", notice);
+                request.setAttribute("noticeID", notice.getSid());
+                request.setAttribute("prePassword", password);
+                request.setAttribute("title", notice.getTitle());
+                request.setAttribute("mainText", notice.getMainText());
+                request.setAttribute("fileNameList", fileNameList);
+                request.setAttribute("noticeBoardURL", noMemberNoitceModifySave);
+                request.setAttribute("hasPassword",true);
+                request.setAttribute("modifyMode", true);
+            }catch(Exception e){
+                e.printStackTrace();
+                return false;
+            }
+            gotoForwardPage(request, response, "/WEB-INF/main_page/notice_board/notice_write.jsp");
+            return true;
+        }
+        // 비회원 글 수정 페이지 end
+
+        // 비회원 글 수정 저장하기
+        if(request.getMethod().equals("POST") && uri.equals(noMemberNoitceModifySave)){
+            try{
+                var title = request.getParameter("title");
+                var mainText = request.getParameter("main-text");
+                var password = request.getParameter("password");
+
+                var sid = Long.parseLong(request.getParameter("noticeID"));
+                var prePassword = request.getParameter("pre-password");
+                // 실패
+                if(title.equals("")) {
+                    simplePage(response, "<script>alert('title blink!');window.history.back();</script>");
+                    return true;
+                }
+                if(mainText.equals("")){
+                    simplePage(response, "<script>alert('main text blink!');window.history.back();</script>");
+                    return true;
+                }
+                if(password.equals("")){
+                    simplePage(response, "<script>alert('password blink!');window.history.back();</script>");
+                    return true;
+                }
+
+                // 이전 비밀 번호 검사
+                var noMemberNoticeBoardDAO = new NoMemberNoticeBoardDAO(getServletContext());
+                var newNoticeId = noMemberNoticeBoardDAO.noticeModifySave(sid,prePassword,title,mainText,password);
+                if(newNoticeId == -1){
+                    simplePage(response, "<script>alert('modify fail!');window.history.back();</script>");
+                    return true;
+                }
+                // ***** 파일 업로드 시작 *****
+                var noticeRe = "no file";
+                try{
+                    // 올바른 파일인지 확인하고 db에 저장한다.
+                    var parts = request.getParts();
+                    var fileSidList = noMemberNoticeBoardDAO.getFileSidList(newNoticeId);
+                    for(var part:parts){
+                        if(!part.getHeader("Content-Disposition").contains("filename=")){
+                            continue;
+                        }
+                        if(part.getSubmittedFileName().equals("")){
+                            continue;
+                        }
+                        // 파일 이름에 금지된 문자가 사용되면 파일 업로드 안하기.
+                        if(notCorrectFileName(part.getSubmittedFileName())){
+                            continue;
+                        }
+
+                        if(fileSidList.size() > MAX_FILE_NUM){
+                            noticeRe = "file max number";
+                            break;
+                        }
+
+                        // 데이터 DB 테이블에 저장하기
+                        var re = new NoMemberNoticeBoardFileDAO(getServletContext()).saveNoticeFile(newNoticeId, part);
+                        part.delete(); // 임시파일 삭제
+
+                        if(re != -1){
+                            System.out.println("업로드 성공");
+                            noticeRe = "file upload success";
+                            fileSidList.add(re);
+                        }else{
+                            System.out.println("파일 업로드 실패");
+                            noticeRe = "file upload fail";
+                        }
+                    }
+
+                    // 게시글 file list 와 저장된 파일 갯수 저장하기.
+                    noMemberNoticeBoardDAO.updateFileListAndCnt(fileSidList, newNoticeId);
+                }catch(Exception e){
+                    e.printStackTrace();
+                    System.out.println("파일 업로드 실패");
+                    noticeRe = "file upload fail";
+                }
+                // ***** 파일 업로드 end *****
+                simplePage(response, "<script>alert('modify success!"+noticeRe+"');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+            }catch(Exception e){
+                e.printStackTrace();
+                return false;
+            }
+            return true;
+        }
+        // 비회원 글 수정 저장하기 end
+
+        // 비회원 글 첨부파일 다운로드
+        if(uri.equals(noMemberNoticeFileDownload)){
+            long pageSid;
+            long fileSid;
+            try {
+                pageSid = Long.parseLong(request.getParameter("pageid"));
+                fileSid = Long.parseLong(request.getParameter("downlink"));
+            } catch (Exception e) {
+                e.printStackTrace();
+                return false;
+            }
+            var password = request.getParameter("password");
+            var noticeDAO = new NoMemberNoticeBoardDAO(getServletContext());
+            var notice = noticeDAO.getNoitceBoard(pageSid,password);
+            if(notice == null) {
+                return false;
+            }
+
+            var fileDAO = new NoMemberNoticeBoardFileDAO(getServletContext());
+            var is = fileDAO.getFile(fileSid);
+            if(is == null){
+                return false;
+            }
+            var fileSize = is.available();
+            var fileName = fileDAO.getFileName(fileSid);
+            // 사용자에게 다운로드 보내기
+            var sMimeType = getServletContext().getMimeType(fileName);
+            if(sMimeType == null || sMimeType.length() == 0){
+                sMimeType = "application/octet-stream";
+            }
+
+            BufferedOutputStream outs = null;
+            try {
+                response.setContentType(sMimeType+"; charset=utf-8");
+                if(fileSize > 0){
+                    response.setContentLength(fileSize);
+                }
+
+                var userAgent = request.getHeader("User-Agent");
+                System.out.println(userAgent);
+                if(userAgent != null && userAgent.contains("MSIE 5.5")){ // MSIE 5.5 이하
+                    return false;
+                }else if(userAgent != null && userAgent.contains("MSIE")){ // MS IE
+                    return false;
+                }else{ // 모질라
+                    response.setHeader("Content-Disposition", "attachment; filename="+ new String(fileName.getBytes("utf-8"), "latin1") + ";");
+                }
+
+                // 사용자에게 파일을 전송한다.
+                outs = new BufferedOutputStream(response.getOutputStream());
+                int read = -1;
+                byte[] b = new byte[8192];
+                while((read = is.read(b)) != -1){
+                    outs.write(b, 0, read);
+                }
+                
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                try {
+                    is.close();
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
+                try {
+                    outs.close();
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
+                // 다운로드 완료 된후 DB 연결을 해제해야한다.
+                fileDAO.Close();
+            }
+
+            System.out.println("사용자 파일 다운로드 "+ pageSid + "  "+ fileSize);
+            return true;
+        }
+        // 비회원 글 첨부파일 다운로드 end
+        // 파일 삭제
+        if(request.getMethod().equals("GET") && uri.equals(noticeBoardFileDelete)){
+            var re = "fail";
+            try{
+                var noticeSid = Long.parseLong(request.getParameter("noticeID"));
+                var fileSid = Long.parseLong(request.getParameter("filename"));
+                var password = request.getParameter("password");
+                
+                var noticeDAO = new NoMemberNoticeBoardDAO(getServletContext());
+                
+                var notice = noticeDAO.getNoitceBoard(noticeSid, password);
+                if(notice == null){ // 비번 틀려서 다운 못받음
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+
+                var fileDAO = new NoMemberNoticeBoardFileDAO(getServletContext());
+                if(!fileDAO.deleteFile(fileSid)){
+                    simplePage(response, "{\"result\":\"fail\"}");
+                    return true;
+                }
+                re = "success";
+                var fileSidList = noticeDAO.getFileSidList(noticeSid);
+                fileSidList.remove(fileSid);
+                noticeDAO.updateFileListAndCnt(fileSidList, noticeSid);
+                System.out.println("삭제 완료!");
+            }catch(Exception e){
+                e.printStackTrace();
+                re = "fail";
+            }
+            simplePage(response, "{\"result\":\""+re+"\"}");
+            return true;
+        }
+        // 파일 삭제 end
+
+        return false;
+    }
+
+
 
     private boolean uriSearch(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException{
         var uri = request.getRequestURI();
