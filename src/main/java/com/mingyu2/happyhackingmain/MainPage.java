@@ -43,10 +43,8 @@ public class MainPage extends HttpServlet{
         var context = getServletContext();
 
         DBConnection.addDBINFO(context, "main", "/WEB-INF/db-info/main-db-info");
-        DBConnection.addDBINFO(context, "prob", "/WEB-INF/db-info/problems-db-info");
+        // DBConnection.addDBINFO(context, "prob", "/WEB-INF/db-info/problems-db-info");
         DBConnection.addDBINFO(context, "noticeBoard", "/WEB-INF/db-info/main-db-info");
-        // test
-        // context.setAttribute("shareValue", "안녕 값 공유중이양!");
     }
 
     @Override
@@ -705,18 +703,20 @@ public class MainPage extends HttpServlet{
         var changeUserInfo = "/main_page/my_page/change_user_info";
         var changePWD = "/main_page/my_page/change_user_pwd";
         
+        // 메뉴
+        var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+        menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+        menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+        menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+        menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+
         if(uri.matches("/main_page[/]?")){
             // 메인페이지를 보여준다.
             request.setAttribute("authProblem1", probURI);
             request.setAttribute("loginMethods", sqlProbURI);
 
-            // 메뉴
-            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
-            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-
+            menus.set(0,new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",true)));
+            
             request.setAttribute("menus", menus);
 
             return mainPage(request, response, 1);
@@ -725,11 +725,11 @@ public class MainPage extends HttpServlet{
         // 마이페이지
         if(uri.equals(myPage)){
             // 메뉴들
-            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
-            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+            // menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             request.setAttribute("menus", menus);
             
             return mainPage(request, response, 0);
@@ -738,11 +738,11 @@ public class MainPage extends HttpServlet{
         // 마이페이지 사용자 정보 변경 페이지
         if(uri.equals(myPageChangeInfo)){
             // 메뉴들
-            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
-            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+            // menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             request.setAttribute("menus", menus);
 
             request.setAttribute("signUpFindAddressNum", findAddress);
@@ -814,11 +814,12 @@ public class MainPage extends HttpServlet{
         // 게시판
         if(request.getMethod().equals("GET") && uri.equals(noticeBoard)){
             // 메뉴들
-            var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
-            menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>("",true)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-            menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
+            // menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>("",true)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+            menus.set(1,new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>("",true)));
             request.setAttribute("menus", menus);
 
             // 검색 옵션 option_val
