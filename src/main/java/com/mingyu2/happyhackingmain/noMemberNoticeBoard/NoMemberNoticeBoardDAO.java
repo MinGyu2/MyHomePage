@@ -191,6 +191,33 @@ public class NoMemberNoticeBoardDAO {
         return noMemberNoticeBoard;
     }
 
+    public NoMemberNoticeBoard getNoitceBoardNoPassword(long sid){
+        NoMemberNoticeBoard noMemberNoticeBoard = null;
+        var query = new StringBuilder();
+        query.append("select * from ");
+        query.append(tableName);
+        query.append(" where sid=?");
+        try{
+            Connection();
+            var pstmt = conn.prepareStatement(query.toString());
+            pstmt.setLong(1, sid);
+            var result = pstmt.executeQuery();
+            if(result.next()){
+                noMemberNoticeBoard = new NoMemberNoticeBoard(
+                    result.getLong(1), 
+                    result.getLong(2), 
+                    result.getString(3),
+                    result.getString(4)
+                );
+            }
+        }catch(Exception e){
+            noMemberNoticeBoard = null;
+        }finally {
+            Close();
+        }
+        return noMemberNoticeBoard;
+    }
+
     public boolean noticeDelete(long sid, String password){
         // 첨부 파일 삭제
         new NoMemberNoticeBoardFileDAO(context).deleteNoticeFile(sid);

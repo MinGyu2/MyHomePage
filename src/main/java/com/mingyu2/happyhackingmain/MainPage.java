@@ -2,6 +2,7 @@ package com.mingyu2.happyhackingmain;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
+import java.io.Console;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.text.SimpleDateFormat;
@@ -51,6 +52,14 @@ public class MainPage extends HttpServlet{
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var uri = request.getRequestURI();
 
+        var userTemp = getSessionUser(request);
+        var auth = false;
+        if(userTemp != null){
+            var userInfo = LoginAuthentication.getUser(getServletContext(), userTemp);
+            auth = userInfo.getAuthority();
+        }
+
+        request.setAttribute("isManager", auth);
         if(noMemberSearch(request,response)){
             return;
         }
@@ -89,6 +98,14 @@ public class MainPage extends HttpServlet{
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var uri = request.getRequestURI();
 
+        var userTemp = getSessionUser(request);
+        var auth = false;
+        if(userTemp != null){
+            var userInfo = LoginAuthentication.getUser(getServletContext(), userTemp);
+            auth = userInfo.getAuthority();
+        }
+
+        request.setAttribute("isManager", auth);
         if(noMemberSearch(request,response)){
             return;
         }
@@ -369,8 +386,18 @@ public class MainPage extends HttpServlet{
                 var notice = noMemberNoticeBoardDAO.getNoitceBoard(sid, password);
 
                 if(notice == null){
-                    simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
-                    return true;
+                    // 권한 검사
+                    var isManager = (Boolean)request.getAttribute("isManager");
+                    System.out.println(isManager);
+                    if(!isManager){
+                        simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                        return true;
+                    }
+                    notice = noMemberNoticeBoardDAO.getNoitceBoardNoPassword(sid);
+                    if(notice == null){
+                        simplePage(response, "<script>alert('password diff!');location.href='"+noMemberNoticeBoard+"?page=1"+"';</script>");
+                        return true;
+                    }
                 }
 
                 var noticeSID = notice.getSid();
@@ -702,12 +729,15 @@ public class MainPage extends HttpServlet{
         var findAddress = "/main_page/my_page/find_address_number";
         var changeUserInfo = "/main_page/my_page/change_user_info";
         var changePWD = "/main_page/my_page/change_user_pwd";
+
+        // qna 게시판
+        var qnaBoard = "/main_page/qna_board";
         
         // 메뉴
         var menus = new ArrayList<Pair<String,Pair<String,Boolean>>>();
         menus.add(new Pair<String,Pair<String,Boolean>>("Home",new Pair<String,Boolean>("/main_page",false)));
-        menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
-        menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
+        menus.add(new Pair<String,Pair<String,Boolean>>("자유 게시판",new Pair<String,Boolean>(noticeBoard+baseNoticeBoardParameter(1,1,"","","",1), false)));
+        menus.add(new Pair<String,Pair<String,Boolean>>("QnA 게시판",new Pair<String,Boolean>(qnaBoard,false)));
         menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
 
         if(uri.matches("/main_page[/]?")){
@@ -819,7 +849,7 @@ public class MainPage extends HttpServlet{
             // menus.add(new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>("",true)));
             // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
             // menus.add(new Pair<String,Pair<String,Boolean>>("버튼2",new Pair<String,Boolean>("",false)));
-            menus.set(1,new Pair<String,Pair<String,Boolean>>("게시판",new Pair<String,Boolean>("",true)));
+            menus.set(1,new Pair<String,Pair<String,Boolean>>("자유 게시판",new Pair<String,Boolean>("",true)));
             request.setAttribute("menus", menus);
 
             // 검색 옵션 option_val
@@ -1044,6 +1074,15 @@ public class MainPage extends HttpServlet{
 
             return mainPage(request, response, 2);
         }
+        // qna 게시판 : 4번
+        if(uri.equals(qnaBoard)){
+            // request.setAttribute("noticeBoardURL", noticeBoardSave);
+            // request.setAttribute("writeMod",1);
+            menus.set(2,new Pair<String,Pair<String,Boolean>>("QnA 게시판",new Pair<String,Boolean>(qnaBoard,true)));
+            request.setAttribute("menus", menus);
+            return mainPage(request, response, 4);
+        }
+
         // 글 새로 쓰기
         if(uri.equals(noticeBoardWrite)){ // mod 1 글쓰기
             request.setAttribute("noticeBoardURL", noticeBoardSave);
